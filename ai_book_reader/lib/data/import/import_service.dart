@@ -114,8 +114,12 @@ class ImportService {
     final importedBooks = <Book>[];
     for (final file in result.files) {
       if (file.path != null) {
-        final book = await importFile(file.path!);
-        importedBooks.add(book);
+        try {
+          final book = await importFile(file.path!);
+          importedBooks.add(book);
+        } catch (_) {
+          if (result.files.length == 1) rethrow;
+        }
       }
     }
 
