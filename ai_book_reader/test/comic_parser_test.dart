@@ -106,9 +106,14 @@ void main() {
     expect(updatedBook.coverImagePath, isNotNull);
   });
 
-  test('ComicParser handles CBR files gracefully by returning empty page list', () async {
+  test('ComicParser extracts pages from CBR files (zip or carved)', () async {
+    final cbzBytes = createTestCbzArchive([
+      'page1.png',
+      'page2.png',
+    ]);
+
     final cbrFile = File('${tempDir.path}/test_comic.cbr');
-    await cbrFile.writeAsString('Dummy RAR content');
+    await cbrFile.writeAsBytes(cbzBytes);
 
     final book = Book()
       ..title = 'Test CBR Comic'
@@ -123,10 +128,11 @@ void main() {
       bookRepository: bookRepo,
     );
 
-    expect(extractedPaths, isEmpty);
+    expect(extractedPaths.length, equals(2));
+    expect(book.pageImagePaths.length, equals(2));
   });
 
-  testWidgets('ComicReaderScreen displays clear unsupported message for CBR format', (WidgetTester tester) async {
+  testWidgets('ComicReaderScreen displays comic UI for CBR format', (WidgetTester tester) async {
     final book = Book()
       ..title = 'Sample CBR Comic'
       ..format = 'cbr'
@@ -149,7 +155,6 @@ void main() {
       ),
     );
 
-    expect(find.text('CBR format is not supported yet'), findsOneWidget);
-    expect(find.textContaining('Please convert your RAR-compressed comic'), findsOneWidget);
+    expect(find.text('No comic pages found in this file.'), findsOneWidget);
   });
 }

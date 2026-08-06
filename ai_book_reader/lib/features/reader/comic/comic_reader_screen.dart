@@ -66,36 +66,6 @@ class ComicReaderScreenState extends ConsumerState<ComicReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final format = widget.book.format.toLowerCase();
-
-    if (format == 'cbr') {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.menu_book_rounded, size: 64, color: Colors.orange),
-              const SizedBox(height: 16),
-              Text(
-                'CBR format is not supported yet',
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Please convert your RAR-compressed comic (.cbr) to ZIP-compressed (.cbz) format to read it.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     if (widget.pagePaths.isEmpty) {
       return Center(
         child: Padding(

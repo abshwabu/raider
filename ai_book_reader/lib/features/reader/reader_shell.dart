@@ -68,11 +68,21 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
       // Fallback extraction if chapters or comic page paths don't exist yet
       final format = book.format.toLowerCase();
       if (format == 'cbz' || format == 'cbr') {
-        if (book.pageImagePaths.isEmpty) {
-          await ComicParser.extractPageImagePaths(
+        bool needsExtraction = book.pageImagePaths.isEmpty;
+        if (!needsExtraction) {
+          for (final path in book.pageImagePaths) {
+            if (!File(path).existsSync()) {
+              needsExtraction = true;
+              break;
+            }
+          }
+        }
+        if (needsExtraction) {
+          final extracted = await ComicParser.extractPageImagePaths(
             book: book,
             bookRepository: bookRepo,
           );
+          book.pageImagePaths = extracted;
         }
       } else if (chapters.isEmpty) {
         if (format == 'pdf') {

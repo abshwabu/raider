@@ -55,7 +55,8 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     // Verify that the Library title and empty state text appear
     expect(find.text('My Library'), findsOneWidget);
