@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/constants/supported_formats.dart';
 import '../../features/reader/epub/epub_parser.dart';
 import '../../features/reader/pdf/pdf_parser.dart';
+import '../../features/reader/txt/txt_parser.dart';
 import '../local/book_repository.dart';
 import '../local/chapter_repository.dart';
 import '../models/book.dart';
@@ -84,6 +85,14 @@ class ImportService {
           filePath: targetPath,
           chapterRepository: chapterRepository,
           bookRepository: bookRepository,
+        );
+      } catch (_) {}
+    } else if (ext == 'txt') {
+      try {
+        await TxtParser.extractChapters(
+          bookId: book.id,
+          filePath: targetPath,
+          chapterRepository: chapterRepository,
         );
       } catch (_) {}
     }

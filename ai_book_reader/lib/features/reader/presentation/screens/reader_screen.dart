@@ -4,6 +4,7 @@ import 'package:ai_book_reader/data/local/book_repository.dart';
 import 'package:ai_book_reader/data/models/book.dart';
 import 'package:ai_book_reader/features/reader/epub/epub_reader_screen.dart';
 import 'package:ai_book_reader/features/reader/pdf/pdf_reader_screen.dart';
+import 'package:ai_book_reader/features/reader/txt/txt_reader_screen.dart';
 
 class ReaderScreen extends ConsumerWidget {
   final String bookId;
@@ -48,6 +49,8 @@ class ReaderScreen extends ConsumerWidget {
             return PdfReaderScreen(bookId: bookId);
           case 'epub':
             return EpubReaderScreen(bookId: bookId);
+          case 'txt':
+            return TxtReaderScreen(bookId: bookId);
           default:
             return Scaffold(
               appBar: AppBar(title: Text(book.title)),
