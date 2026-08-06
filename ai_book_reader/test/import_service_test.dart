@@ -81,14 +81,17 @@ void main() {
   test('Multiple file import creates multiple Book records', () async {
     final file1 = File('${tempDir.path}/book_one.epub');
     final file2 = File('${tempDir.path}/book_two.txt');
+    final file3 = File('${tempDir.path}/book_three.docx');
     await file1.writeAsString('epub content');
     await file2.writeAsString('txt content');
+    await file3.writeAsString('docx content');
 
     await importService.importFile(file1.path);
     await importService.importFile(file2.path);
+    await importService.importFile(file3.path);
 
     final allBooks = await bookRepo.getAllBooks();
-    expect(allBooks.length, equals(2));
-    expect(allBooks.map((b) => b.format), containsAll(['epub', 'txt']));
+    expect(allBooks.length, equals(3));
+    expect(allBooks.map((b) => b.format), containsAll(['epub', 'txt', 'docx']));
   });
 }

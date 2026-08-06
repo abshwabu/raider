@@ -5,6 +5,8 @@ import '../../data/local/book_repository.dart';
 import '../../data/local/chapter_repository.dart';
 import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
+import 'docx/docx_parser.dart';
+import 'docx/docx_reader_screen.dart';
 import 'epub/epub_parser.dart';
 import 'epub/epub_reader_screen.dart';
 import 'pdf/pdf_parser.dart';
@@ -30,6 +32,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
   final GlobalKey<PdfReaderScreenState> _pdfKey = GlobalKey<PdfReaderScreenState>();
   final GlobalKey<EpubReaderScreenState> _epubKey = GlobalKey<EpubReaderScreenState>();
   final GlobalKey<TxtReaderScreenState> _txtKey = GlobalKey<TxtReaderScreenState>();
+  final GlobalKey<DocxReaderScreenState> _docxKey = GlobalKey<DocxReaderScreenState>();
 
   Book? _book;
   List<Chapter> _chapters = [];
@@ -78,6 +81,12 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
             filePath: book.filePath,
             chapterRepository: chapterRepo,
           );
+        } else if (format == 'docx') {
+          chapters = await DocxParser.extractChapters(
+            bookId: book.id,
+            filePath: book.filePath,
+            chapterRepository: chapterRepo,
+          );
         }
       }
 
@@ -111,6 +120,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
       _epubKey.currentState?.jumpToChapter(index);
     } else if (format == 'txt') {
       _txtKey.currentState?.jumpToChapter(index);
+    } else if (format == 'docx') {
+      _docxKey.currentState?.jumpToChapter(index);
     }
   }
 
@@ -133,6 +144,12 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
       case 'txt':
         return TxtReaderScreen(
           key: _txtKey,
+          book: _book!,
+          chapters: _chapters,
+        );
+      case 'docx':
+        return DocxReaderScreen(
+          key: _docxKey,
           book: _book!,
           chapters: _chapters,
         );

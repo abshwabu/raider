@@ -4,21 +4,21 @@ import '../../../data/models/book.dart';
 import '../../../data/models/chapter.dart';
 import '../shared/html_chapter_view.dart';
 
-class EpubReaderScreen extends ConsumerStatefulWidget {
+class DocxReaderScreen extends ConsumerStatefulWidget {
   final Book book;
   final List<Chapter> chapters;
 
-  const EpubReaderScreen({
+  const DocxReaderScreen({
     super.key,
     required this.book,
     required this.chapters,
   });
 
   @override
-  ConsumerState<EpubReaderScreen> createState() => EpubReaderScreenState();
+  ConsumerState<DocxReaderScreen> createState() => DocxReaderScreenState();
 }
 
-class EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
+class DocxReaderScreenState extends ConsumerState<DocxReaderScreen> {
   final GlobalKey<HtmlChapterViewState> _htmlViewKey = GlobalKey<HtmlChapterViewState>();
 
   int get currentChapterIndex => _htmlViewKey.currentState?.currentChapterIndex ?? 0;
@@ -33,7 +33,7 @@ class EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
       key: _htmlViewKey,
       book: widget.book,
       chapters: widget.chapters,
-      emptyMessage: 'EPUB book has no chapters.',
+      emptyMessage: 'DOCX book has no chapters.',
     );
   }
 }

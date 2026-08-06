@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../../../core/utils/chapter_utils.dart';
 import '../../../data/local/chapter_repository.dart';
 import '../../../data/models/chapter.dart';
 
@@ -22,7 +23,7 @@ class TxtParser {
       content = latin1.decode(bytes);
     }
 
-    final chapters = <Chapter>[];
+    var chapters = <Chapter>[];
     final lines = content.split(RegExp(r'\r?\n'));
 
     final chapterHeaderRegex = RegExp(
@@ -85,25 +86,10 @@ class TxtParser {
 
     // Fallback: If heuristic detected 0 or 1 chapter for a large file, split every ~3000 words
     if (chapters.length <= 1) {
-      chapters.clear();
-      final words = content.split(RegExp(r'\s+'));
-      const wordsPerChapter = 3000;
-      int syntheticOrder = 1;
-
-      for (int i = 0; i < words.length; i += wordsPerChapter) {
-        final end = (i + wordsPerChapter < words.length) ? i + wordsPerChapter : words.length;
-        final chunkText = words.sublist(i, end).join(' ');
-
-        if (chunkText.trim().isNotEmpty) {
-          chapters.add(
-            Chapter()
-              ..bookId = bookId
-              ..title = 'Section $syntheticOrder (Words ${i + 1}–$end)'
-              ..order = syntheticOrder++
-              ..content = chunkText,
-          );
-        }
-      }
+      chapters = chapterizeByWordCount(
+        bookId: bookId,
+        textContent: content,
+      );
     }
 
     if (chapterRepository != null && chapters.isNotEmpty) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/supported_formats.dart';
+import '../../features/reader/docx/docx_parser.dart';
 import '../../features/reader/epub/epub_parser.dart';
 import '../../features/reader/pdf/pdf_parser.dart';
 import '../../features/reader/txt/txt_parser.dart';
@@ -90,6 +91,14 @@ class ImportService {
     } else if (ext == 'txt') {
       try {
         await TxtParser.extractChapters(
+          bookId: book.id,
+          filePath: targetPath,
+          chapterRepository: chapterRepository,
+        );
+      } catch (_) {}
+    } else if (ext == 'docx') {
+      try {
+        await DocxParser.extractChapters(
           bookId: book.id,
           filePath: targetPath,
           chapterRepository: chapterRepository,
