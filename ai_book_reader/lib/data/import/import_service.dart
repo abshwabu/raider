@@ -7,6 +7,7 @@ import '../../core/constants/supported_formats.dart';
 import '../../features/reader/comic/comic_parser.dart';
 import '../../features/reader/docx/docx_parser.dart';
 import '../../features/reader/epub/epub_parser.dart';
+import '../../features/reader/mobi/mobi_parser.dart';
 import '../../features/reader/pdf/pdf_parser.dart';
 import '../../features/reader/txt/txt_parser.dart';
 import '../local/book_repository.dart';
@@ -111,6 +112,19 @@ class ImportService {
           book: book,
           bookRepository: bookRepository,
         );
+      } catch (_) {}
+    } else if (ext == 'mobi' || ext == 'azw3') {
+      try {
+        await MobiParser.extractChapters(
+          bookId: book.id,
+          filePath: targetPath,
+          chapterRepository: chapterRepository,
+        );
+      } on DrmProtectedException catch (e) {
+        try {
+          await bookRepository.deleteBook(book.id);
+        } catch (_) {}
+        throw UnsupportedFormatException(e.message);
       } catch (_) {}
     }
 

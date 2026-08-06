@@ -11,6 +11,8 @@ import 'docx/docx_parser.dart';
 import 'docx/docx_reader_screen.dart';
 import 'epub/epub_parser.dart';
 import 'epub/epub_reader_screen.dart';
+import 'mobi/mobi_parser.dart';
+import 'mobi/mobi_reader_screen.dart';
 import 'pdf/pdf_parser.dart';
 import 'pdf/pdf_reader_screen.dart';
 import 'shared/chapter_list_drawer.dart';
@@ -36,6 +38,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
   final GlobalKey<TxtReaderScreenState> _txtKey = GlobalKey<TxtReaderScreenState>();
   final GlobalKey<DocxReaderScreenState> _docxKey = GlobalKey<DocxReaderScreenState>();
   final GlobalKey<ComicReaderScreenState> _comicKey = GlobalKey<ComicReaderScreenState>();
+  final GlobalKey<MobiReaderScreenState> _mobiKey = GlobalKey<MobiReaderScreenState>();
 
   Book? _book;
   List<Chapter> _chapters = [];
@@ -97,6 +100,12 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
             filePath: book.filePath,
             chapterRepository: chapterRepo,
           );
+        } else if (format == 'mobi' || format == 'azw3') {
+          chapters = await MobiParser.extractChapters(
+            bookId: book.id,
+            filePath: book.filePath,
+            chapterRepository: chapterRepo,
+          );
         }
       }
 
@@ -132,6 +141,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
       _txtKey.currentState?.jumpToChapter(index);
     } else if (format == 'docx') {
       _docxKey.currentState?.jumpToChapter(index);
+    } else if (format == 'mobi' || format == 'azw3') {
+      _mobiKey.currentState?.jumpToChapter(index);
     }
   }
 
@@ -169,6 +180,13 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _comicKey,
           book: _book!,
           pagePaths: _book!.pageImagePaths,
+        );
+      case 'mobi':
+      case 'azw3':
+        return MobiReaderScreen(
+          key: _mobiKey,
+          book: _book!,
+          chapters: _chapters,
         );
       default:
         return Center(
