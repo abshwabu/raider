@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/supported_formats.dart';
+import '../../features/reader/pdf/pdf_parser.dart';
 import '../local/book_repository.dart';
+import '../local/chapter_repository.dart';
 import '../models/book.dart';
 
 class UnsupportedFormatException implements Exception {
@@ -17,13 +19,15 @@ class UnsupportedFormatException implements Exception {
 
 final importServiceProvider = Provider<ImportService>((ref) {
   final bookRepo = ref.watch(bookRepositoryProvider);
-  return ImportService(bookRepo);
+  final chapterRepo = ref.watch(chapterRepositoryProvider);
+  return ImportService(bookRepo, chapterRepo);
 });
 
 class ImportService {
   final BookRepository bookRepository;
+  final ChapterRepository chapterRepository;
 
-  ImportService(this.bookRepository);
+  ImportService(this.bookRepository, this.chapterRepository);
 
   Future<Book> importFile(String sourcePath) async {
     final file = File(sourcePath);
@@ -63,6 +67,16 @@ class ImportService {
 
     final id = await bookRepository.addBook(book);
     book.id = id;
+
+    if (ext == 'pdf') {
+      try {
+        await PdfParser.extractChapters(
+          bookId: book.id,
+          filePath: targetPath,
+          chapterRepository: chapterRepository,
+        );
+      } catch (_) {}
+    }
 
     return book;
   }

@@ -4,6 +4,7 @@ import 'package:isar/isar.dart';
 import 'package:ai_book_reader/data/models/book.dart';
 import 'package:ai_book_reader/data/models/chapter.dart';
 import 'package:ai_book_reader/data/local/book_repository.dart';
+import 'package:ai_book_reader/data/local/chapter_repository.dart';
 import 'package:ai_book_reader/data/import/import_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -40,7 +41,8 @@ void main() {
       directory: tempDir.path,
     );
     bookRepo = BookRepository(isar);
-    importService = ImportService(bookRepo);
+    final chapterRepo = ChapterRepository(isar);
+    importService = ImportService(bookRepo, chapterRepo);
   });
 
   tearDown(() async {
