@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ai_book_reader/data/local/book_repository.dart';
 import 'package:ai_book_reader/data/models/book.dart';
+import 'package:ai_book_reader/features/reader/epub/epub_reader_screen.dart';
 import 'package:ai_book_reader/features/reader/pdf/pdf_reader_screen.dart';
 
 class ReaderScreen extends ConsumerWidget {
@@ -45,6 +46,8 @@ class ReaderScreen extends ConsumerWidget {
         switch (book.format.toLowerCase()) {
           case 'pdf':
             return PdfReaderScreen(bookId: bookId);
+          case 'epub':
+            return EpubReaderScreen(bookId: bookId);
           default:
             return Scaffold(
               appBar: AppBar(title: Text(book.title)),

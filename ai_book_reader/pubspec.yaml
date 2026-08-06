@@ -44,6 +44,10 @@ dependencies:
   path: ^1.9.0
   syncfusion_flutter_pdfviewer: ^26.2.1
   syncfusion_flutter_pdf: ^26.2.1
+  epubx: ^4.0.0
+  flutter_html: ^3.0.0
+  image: ^3.3.0
+  archive: ^3.6.1
 
 dev_dependencies:
   flutter_test:

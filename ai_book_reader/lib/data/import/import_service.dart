@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/supported_formats.dart';
+import '../../features/reader/epub/epub_parser.dart';
 import '../../features/reader/pdf/pdf_parser.dart';
 import '../local/book_repository.dart';
 import '../local/chapter_repository.dart';
@@ -74,6 +75,15 @@ class ImportService {
           bookId: book.id,
           filePath: targetPath,
           chapterRepository: chapterRepository,
+        );
+      } catch (_) {}
+    } else if (ext == 'epub') {
+      try {
+        await EpubParser.extractChapters(
+          bookId: book.id,
+          filePath: targetPath,
+          chapterRepository: chapterRepository,
+          bookRepository: bookRepository,
         );
       } catch (_) {}
     }
