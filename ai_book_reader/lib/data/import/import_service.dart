@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/supported_formats.dart';
+import '../../features/ai/chunking/chunking_service.dart';
 import '../../features/reader/comic/comic_parser.dart';
 import '../../features/reader/docx/docx_parser.dart';
 import '../../features/reader/epub/epub_parser.dart';
@@ -25,14 +27,20 @@ class UnsupportedFormatException implements Exception {
 final importServiceProvider = Provider<ImportService>((ref) {
   final bookRepo = ref.watch(bookRepositoryProvider);
   final chapterRepo = ref.watch(chapterRepositoryProvider);
-  return ImportService(bookRepo, chapterRepo);
+  final chunkingService = ref.watch(chunkingServiceProvider);
+  return ImportService(bookRepo, chapterRepo, chunkingService: chunkingService);
 });
 
 class ImportService {
   final BookRepository bookRepository;
   final ChapterRepository chapterRepository;
+  final ChunkingService? chunkingService;
 
-  ImportService(this.bookRepository, this.chapterRepository);
+  ImportService(
+    this.bookRepository,
+    this.chapterRepository, {
+    this.chunkingService,
+  });
 
   Future<Book> importFile(String sourcePath) async {
     final file = File(sourcePath);
@@ -126,6 +134,10 @@ class ImportService {
         } catch (_) {}
         throw UnsupportedFormatException(e.message);
       } catch (_) {}
+    }
+
+    if (ext != 'cbz' && ext != 'cbr' && chunkingService != null) {
+      unawaited(chunkingService!.chunkBook(book.id));
     }
 
     return book;

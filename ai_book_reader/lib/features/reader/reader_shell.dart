@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import '../../data/local/book_repository.dart';
 import '../../data/local/chapter_repository.dart';
 import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
+import '../ai/chunking/chunking_service.dart';
 import 'comic/comic_parser.dart';
 import 'comic/comic_reader_screen.dart';
 import 'docx/docx_parser.dart';
@@ -117,6 +119,10 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
             chapterRepository: chapterRepo,
           );
         }
+      }
+
+      if (format != 'cbz' && format != 'cbr') {
+        unawaited(ref.read(chunkingServiceProvider).chunkBook(book.id));
       }
 
       int initialChapterIndex = 0;

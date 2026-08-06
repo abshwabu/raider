@@ -50,6 +50,7 @@ dependencies:
   image: ^3.3.0
   archive: ^3.6.1
   xml: ^6.5.0
+  html: ^0.15.4
 
 dev_dependencies:
   flutter_test:
