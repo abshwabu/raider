@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/supported_formats.dart';
+import '../../features/reader/comic/comic_parser.dart';
 import '../../features/reader/docx/docx_parser.dart';
 import '../../features/reader/epub/epub_parser.dart';
 import '../../features/reader/pdf/pdf_parser.dart';
@@ -102,6 +103,13 @@ class ImportService {
           bookId: book.id,
           filePath: targetPath,
           chapterRepository: chapterRepository,
+        );
+      } catch (_) {}
+    } else if (ext == 'cbz' || ext == 'cbr') {
+      try {
+        await ComicParser.extractPageImagePaths(
+          book: book,
+          bookRepository: bookRepository,
         );
       } catch (_) {}
     }

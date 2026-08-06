@@ -47,13 +47,18 @@ const BookSchema = CollectionSchema(
       name: r'lastOpenedAt',
       type: IsarType.dateTime,
     ),
-    r'readingProgress': PropertySchema(
+    r'pageImagePaths': PropertySchema(
       id: 6,
+      name: r'pageImagePaths',
+      type: IsarType.stringList,
+    ),
+    r'readingProgress': PropertySchema(
+      id: 7,
       name: r'readingProgress',
       type: IsarType.double,
     ),
     r'title': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'title',
       type: IsarType.string,
     )
@@ -92,6 +97,13 @@ int _bookEstimateSize(
   }
   bytesCount += 3 + object.filePath.length * 3;
   bytesCount += 3 + object.format.length * 3;
+  bytesCount += 3 + object.pageImagePaths.length * 3;
+  {
+    for (var i = 0; i < object.pageImagePaths.length; i++) {
+      final value = object.pageImagePaths[i];
+      bytesCount += value.length * 3;
+    }
+  }
   bytesCount += 3 + object.title.length * 3;
   return bytesCount;
 }
@@ -108,8 +120,9 @@ void _bookSerialize(
   writer.writeString(offsets[3], object.filePath);
   writer.writeString(offsets[4], object.format);
   writer.writeDateTime(offsets[5], object.lastOpenedAt);
-  writer.writeDouble(offsets[6], object.readingProgress);
-  writer.writeString(offsets[7], object.title);
+  writer.writeStringList(offsets[6], object.pageImagePaths);
+  writer.writeDouble(offsets[7], object.readingProgress);
+  writer.writeString(offsets[8], object.title);
 }
 
 Book _bookDeserialize(
@@ -126,8 +139,9 @@ Book _bookDeserialize(
   object.format = reader.readString(offsets[4]);
   object.id = id;
   object.lastOpenedAt = reader.readDateTimeOrNull(offsets[5]);
-  object.readingProgress = reader.readDouble(offsets[6]);
-  object.title = reader.readString(offsets[7]);
+  object.pageImagePaths = reader.readStringList(offsets[6]) ?? [];
+  object.readingProgress = reader.readDouble(offsets[7]);
+  object.title = reader.readString(offsets[8]);
   return object;
 }
 
@@ -151,8 +165,10 @@ P _bookDeserializeProp<P>(
     case 5:
       return (reader.readDateTimeOrNull(offset)) as P;
     case 6:
-      return (reader.readDouble(offset)) as P;
+      return (reader.readStringList(offset) ?? []) as P;
     case 7:
+      return (reader.readDouble(offset)) as P;
+    case 8:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -968,6 +984,225 @@ extension BookQueryFilter on QueryBuilder<Book, Book, QFilterCondition> {
     });
   }
 
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'pageImagePaths',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition>
+      pageImagePathsElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'pageImagePaths',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'pageImagePaths',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'pageImagePaths',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition>
+      pageImagePathsElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'pageImagePaths',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'pageImagePaths',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsElementContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'pageImagePaths',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsElementMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'pageImagePaths',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition>
+      pageImagePathsElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'pageImagePaths',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition>
+      pageImagePathsElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'pageImagePaths',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsLengthEqualTo(
+      int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'pageImagePaths',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'pageImagePaths',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'pageImagePaths',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'pageImagePaths',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition>
+      pageImagePathsLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'pageImagePaths',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<Book, Book, QAfterFilterCondition> pageImagePathsLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'pageImagePaths',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
   QueryBuilder<Book, Book, QAfterFilterCondition> readingProgressEqualTo(
     double value, {
     double epsilon = Query.epsilon,
@@ -1413,6 +1648,12 @@ extension BookQueryWhereDistinct on QueryBuilder<Book, Book, QDistinct> {
     });
   }
 
+  QueryBuilder<Book, Book, QDistinct> distinctByPageImagePaths() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'pageImagePaths');
+    });
+  }
+
   QueryBuilder<Book, Book, QDistinct> distinctByReadingProgress() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'readingProgress');
@@ -1467,6 +1708,12 @@ extension BookQueryProperty on QueryBuilder<Book, Book, QQueryProperty> {
   QueryBuilder<Book, DateTime?, QQueryOperations> lastOpenedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'lastOpenedAt');
+    });
+  }
+
+  QueryBuilder<Book, List<String>, QQueryOperations> pageImagePathsProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'pageImagePaths');
     });
   }
 

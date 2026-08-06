@@ -17,6 +17,9 @@ class Book {
 
   String? coverImagePath;
 
+  /// Extracted page image paths for comic books (CBZ/CBR)
+  List<String> pageImagePaths = [];
+
   late DateTime addedAt;
   DateTime? lastOpenedAt;
 

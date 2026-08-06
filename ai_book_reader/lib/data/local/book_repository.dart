@@ -38,6 +38,12 @@ class BookRepository {
     });
   }
 
+  Future<void> updateBook(Book book) async {
+    await isar.writeTxn(() async {
+      await isar.books.put(book);
+    });
+  }
+
   Future<void> updateReadingProgress(int bookId, double progress) async {
     await isar.writeTxn(() async {
       final book = await isar.books.get(bookId);

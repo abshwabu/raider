@@ -5,6 +5,8 @@ import '../../data/local/book_repository.dart';
 import '../../data/local/chapter_repository.dart';
 import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
+import 'comic/comic_parser.dart';
+import 'comic/comic_reader_screen.dart';
 import 'docx/docx_parser.dart';
 import 'docx/docx_reader_screen.dart';
 import 'epub/epub_parser.dart';
@@ -33,6 +35,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
   final GlobalKey<EpubReaderScreenState> _epubKey = GlobalKey<EpubReaderScreenState>();
   final GlobalKey<TxtReaderScreenState> _txtKey = GlobalKey<TxtReaderScreenState>();
   final GlobalKey<DocxReaderScreenState> _docxKey = GlobalKey<DocxReaderScreenState>();
+  final GlobalKey<ComicReaderScreenState> _comicKey = GlobalKey<ComicReaderScreenState>();
 
   Book? _book;
   List<Chapter> _chapters = [];
@@ -59,9 +62,16 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
     if (book != null) {
       var chapters = await chapterRepo.getChaptersForBook(book.id);
 
-      // Fallback extraction if chapters don't exist yet
-      if (chapters.isEmpty) {
-        final format = book.format.toLowerCase();
+      // Fallback extraction if chapters or comic page paths don't exist yet
+      final format = book.format.toLowerCase();
+      if (format == 'cbz' || format == 'cbr') {
+        if (book.pageImagePaths.isEmpty) {
+          await ComicParser.extractPageImagePaths(
+            book: book,
+            bookRepository: bookRepo,
+          );
+        }
+      } else if (chapters.isEmpty) {
         if (format == 'pdf') {
           chapters = await PdfParser.extractChapters(
             bookId: book.id,
@@ -153,6 +163,13 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           book: _book!,
           chapters: _chapters,
         );
+      case 'cbz':
+      case 'cbr':
+        return ComicReaderScreen(
+          key: _comicKey,
+          book: _book!,
+          pagePaths: _book!.pageImagePaths,
+        );
       default:
         return Center(
           child: Column(
@@ -188,38 +205,47 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
       );
     }
 
+    final format = _book!.format.toLowerCase();
+    final isComic = format == 'cbz' || format == 'cbr';
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
         title: Text(_book!.title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.format_list_bulleted_rounded),
-            tooltip: 'Table of Contents',
-            onPressed: () {
-              _scaffoldKey.currentState?.openEndDrawer();
-            },
-          ),
-        ],
+        actions: isComic
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.format_list_bulleted_rounded),
+                  tooltip: 'Table of Contents',
+                  onPressed: () {
+                    _scaffoldKey.currentState?.openEndDrawer();
+                  },
+                ),
+              ],
       ),
-      endDrawer: ChapterListDrawer(
-        bookTitle: _book!.title,
-        chapters: _chapters,
-        currentChapterIndex: _currentChapterIndex,
-        onChapterSelected: _onChapterSelected,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('AI Chat feature coming in Phase 3'),
-              duration: Duration(seconds: 2),
+      endDrawer: isComic
+          ? null
+          : ChapterListDrawer(
+              bookTitle: _book!.title,
+              chapters: _chapters,
+              currentChapterIndex: _currentChapterIndex,
+              onChapterSelected: _onChapterSelected,
             ),
-          );
-        },
-        icon: const Icon(Icons.auto_awesome_rounded),
-        label: const Text('Ask AI'),
-      ),
+      floatingActionButton: isComic
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('AI Chat feature coming in Phase 3'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.auto_awesome_rounded),
+              label: const Text('Ask AI'),
+            ),
       body: _buildFormatBody(),
     );
   }
