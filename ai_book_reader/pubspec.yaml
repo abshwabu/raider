@@ -51,6 +51,8 @@ dependencies:
   archive: ^3.6.1
   xml: ^6.5.0
   html: ^0.15.4
+  google_generative_ai: ^0.4.0
+  dio: ^5.4.0
 
 dev_dependencies:
   flutter_test:

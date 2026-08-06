@@ -4,12 +4,18 @@ import 'core/theme/app_theme.dart';
 import 'features/library/presentation/screens/library_screen.dart';
 import 'features/reader/presentation/screens/reader_screen.dart';
 
+import 'features/settings/ai_settings_screen.dart';
+
 final _router = GoRouter(
   initialLocation: '/library',
   routes: [
     GoRoute(
       path: '/library',
       builder: (context, state) => const LibraryScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const AiSettingsScreen(),
     ),
     GoRoute(
       path: '/reader/:bookId',

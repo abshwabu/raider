@@ -222,8 +222,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.settings_outlined),
+              tooltip: 'AI & BYOK Settings',
               onPressed: () {
-                // Settings screen placeholder
+                context.push('/settings');
               },
             ),
           ],
