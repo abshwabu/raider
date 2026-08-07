@@ -8,6 +8,7 @@ import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
 import '../ai/chunking/chunking_service.dart';
 import '../ai_chat/ai_chat_screen.dart';
+import '../studio/studio_hub_screen.dart';
 import 'comic/comic_parser.dart';
 import 'comic/comic_reader_screen.dart';
 import 'docx/docx_parser.dart';
@@ -269,20 +270,51 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
             ),
       floatingActionButton: isComic
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (context) => AiChatScreen(
-                    bookId: _book!.id,
-                    bookTitle: _book!.title,
-                  ),
-                );
-              },
-              icon: const Icon(Icons.auto_awesome_rounded),
-              label: const Text('Ask AI'),
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'studio_fab',
+                  onPressed: () {
+                    final chapter = _chapters.isNotEmpty &&
+                            _currentChapterIndex >= 0 &&
+                            _currentChapterIndex < _chapters.length
+                        ? _chapters[_currentChapterIndex]
+                        : null;
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => StudioHubScreen(
+                        bookId: _book!.id,
+                        bookTitle: _book!.title,
+                        currentChapterId: chapter?.id,
+                        currentChapterTitle: chapter?.title,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.auto_stories_outlined),
+                  label: const Text('Studio'),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'ask_ai_fab',
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => AiChatScreen(
+                        bookId: _book!.id,
+                        bookTitle: _book!.title,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                  label: const Text('Ask AI'),
+                ),
+              ],
             ),
       body: _buildFormatBody(),
     );

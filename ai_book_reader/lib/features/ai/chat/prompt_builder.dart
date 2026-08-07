@@ -1,5 +1,6 @@
 import '../../../data/models/book.dart';
 import '../../../data/models/chunk.dart';
+import '../../../data/models/studio_artifact.dart';
 
 class PromptBuilder {
   /// Builds the system prompt grounding the model to answer only using provided excerpts.
@@ -45,5 +46,122 @@ User Question: $question''';
     buffer.writeln(question.trim());
 
     return buffer.toString();
+  }
+
+  String buildStudioSystemPrompt({
+    required Book book,
+    required StudioArtifactType type,
+    required StudioArtifactScope scope,
+  }) {
+    final authorStr = (book.author != null && book.author!.isNotEmpty)
+        ? ' by ${book.author}'
+        : '';
+    final scopeLabel =
+        scope == StudioArtifactScope.chapter ? 'the selected chapter' : 'the whole book';
+
+    return '''You are a study studio assistant for "${book.title}"$authorStr.
+
+Create a high-quality ${type.name} learning artifact grounded ONLY in the provided excerpts from $scopeLabel.
+
+Rules:
+1. Use only the provided excerpts. Do not invent facts outside them.
+2. If excerpts are thin, still produce the best possible artifact and keep claims modest.
+3. Follow the output format exactly.
+4. Prefer clear, exam-ready language.''';
+  }
+
+  String buildStudioUserPrompt({
+    required StudioArtifactType type,
+    required List<Chunk> excerpts,
+    String? chapterTitle,
+  }) {
+    final buffer = StringBuffer();
+    if (chapterTitle != null && chapterTitle.trim().isNotEmpty) {
+      buffer.writeln('Scope: chapter "$chapterTitle"');
+      buffer.writeln();
+    }
+
+    buffer.writeln('Book excerpts:');
+    buffer.writeln();
+    if (excerpts.isEmpty) {
+      buffer.writeln('(No excerpts available)');
+    } else {
+      for (var i = 0; i < excerpts.length; i++) {
+        final chunk = excerpts[i];
+        buffer.writeln('[Excerpt ${i + 1} | Chapter ID: ${chunk.chapterId}]');
+        buffer.writeln(chunk.text);
+        buffer.writeln();
+      }
+    }
+
+    buffer.writeln(_studioTaskInstruction(type));
+    return buffer.toString();
+  }
+
+  String _studioTaskInstruction(StudioArtifactType type) {
+    switch (type) {
+      case StudioArtifactType.quiz:
+        return '''Task: Create a multiple-choice quiz.
+Return ONLY valid JSON with this shape:
+{
+  "title": "string",
+  "questions": [
+    {
+      "question": "string",
+      "choices": ["A", "B", "C", "D"],
+      "correctIndex": 0,
+      "explanation": "string"
+    }
+  ]
+}
+Requirements: 5 to 8 questions, exactly 4 choices each, correctIndex is 0-based.''';
+      case StudioArtifactType.flashcards:
+        return '''Task: Create study flashcards.
+Return ONLY valid JSON with this shape:
+{
+  "cards": [
+    { "front": "prompt or term", "back": "answer or definition" }
+  ]
+}
+Requirements: 8 to 16 cards covering key ideas, terms, and relationships.''';
+      case StudioArtifactType.studyGuide:
+        return '''Task: Create a study guide in Markdown.
+Return ONLY valid JSON with this shape:
+{
+  "markdown": "# Study Guide\\n\\n## Briefing\\n...\\n## Key Ideas\\n...\\n## FAQ\\n...\\n## Glossary\\n..."
+}
+Include these sections: Briefing, Key Ideas, FAQ, Glossary.''';
+      case StudioArtifactType.slides:
+        return '''Task: Create a slideshow outline.
+Return ONLY valid JSON with this shape:
+{
+  "title": "string",
+  "slides": [
+    {
+      "heading": "string",
+      "bullets": ["string"],
+      "speakerNote": "optional string"
+    }
+  ]
+}
+Requirements: 6 to 10 slides, 3 to 5 bullets each, concise headings.''';
+      case StudioArtifactType.mindMap:
+        return '''Task: Create a hierarchical mind map.
+Return ONLY valid JSON with this shape:
+{
+  "root": {
+    "label": "central topic",
+    "children": [
+      {
+        "label": "branch",
+        "children": [
+          { "label": "leaf", "children": [] }
+        ]
+      }
+    ]
+  }
+}
+Requirements: depth 2 to 4, clear short labels, grounded in the excerpts.''';
+    }
   }
 }

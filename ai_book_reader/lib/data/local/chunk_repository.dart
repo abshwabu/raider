@@ -21,6 +21,15 @@ class ChunkRepository {
         .findAll();
   }
 
+  Future<List<Chunk>> getChunksForChapter(int bookId, int chapterId) async {
+    return await isar.chunks
+        .filter()
+        .bookIdEqualTo(bookId)
+        .chapterIdEqualTo(chapterId)
+        .sortByOrderInChapter()
+        .findAll();
+  }
+
   Future<void> addChunks(List<Chunk> chunks) async {
     await isar.writeTxn(() async {
       await isar.chunks.putAll(chunks);

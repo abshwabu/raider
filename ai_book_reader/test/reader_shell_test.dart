@@ -104,9 +104,10 @@ void main() {
     await tester.idle();
     await tester.pump();
 
-    // Verify AppBar title & Ask AI FAB
+    // Verify AppBar title & Ask AI / Studio FABs
     expect(find.text('Shell Test Book'), findsOneWidget);
     expect(find.text('Ask AI'), findsOneWidget);
+    expect(find.text('Studio'), findsOneWidget);
 
     // Tap Ask AI FAB -> verify AiChatScreen bottom sheet opens
     await tester.tap(find.text('Ask AI'));

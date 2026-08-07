@@ -6,6 +6,7 @@ import '../models/chapter.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/chunk.dart';
+import '../models/studio_artifact.dart';
 
 final isarProvider = Provider<Isar>((ref) {
   throw UnimplementedError('isarProvider must be overridden in ProviderScope');
@@ -22,6 +23,7 @@ class IsarService {
           ChunkSchema,
           ChatSessionSchema,
           ChatMessageSchema,
+          StudioArtifactSchema,
         ],
         directory: path,
         inspector: false,
