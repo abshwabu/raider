@@ -7,6 +7,7 @@ import '../../data/local/chapter_repository.dart';
 import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
 import '../ai/chunking/chunking_service.dart';
+import '../ai_chat/ai_chat_screen.dart';
 import 'comic/comic_parser.dart';
 import 'comic/comic_reader_screen.dart';
 import 'docx/docx_parser.dart';
@@ -270,10 +271,13 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           ? null
           : FloatingActionButton.extended(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('AI Chat feature coming in Phase 3'),
-                    duration: Duration(seconds: 2),
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => AiChatScreen(
+                    bookId: _book!.id,
+                    bookTitle: _book!.title,
                   ),
                 );
               },

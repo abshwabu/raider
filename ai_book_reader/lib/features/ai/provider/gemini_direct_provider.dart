@@ -19,21 +19,49 @@ class GeminiDirectProvider implements AiProvider {
   @override
   Future<List<double>> embed(String text) async {
     final apiKey = await _getValidApiKey();
-    final model = GenerativeModel(
-      model: 'text-embedding-004',
-      apiKey: apiKey,
-    );
 
-    try {
-      final response = await model.embedContent(Content.text(text));
-      return response.embedding.values;
-    } catch (e) {
-      final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('api_key') || errorStr.contains('unauthorized') || errorStr.contains('invalid')) {
-        throw NoApiKeyException('Invalid Gemini API Key: $e');
+    // text-embedding-004 / embedding-001 were shut down; use current Gemini embedding models.
+    final embeddingModels = ['gemini-embedding-001', 'gemini-embedding-2'];
+
+    Object? lastError;
+
+    for (final modelName in embeddingModels) {
+      try {
+        final model = GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+        );
+        final response = await model.embedContent(Content.text(text));
+        return response.embedding.values;
+      } catch (e) {
+        lastError = e;
+        final errorStr = e.toString().toLowerCase();
+
+        // Throw NoApiKeyException immediately if auth/key issue
+        if (errorStr.contains('api_key') ||
+            errorStr.contains('unauthorized') ||
+            errorStr.contains('invalid api key') ||
+            errorStr.contains('api key not valid')) {
+          throw NoApiKeyException('Invalid Gemini API Key: $e');
+        }
+
+        // If it's a model not found / not supported error, continue loop to try fallback model
+        if (errorStr.contains('not found') ||
+            errorStr.contains('not supported') ||
+            errorStr.contains('404') ||
+            errorStr.contains('models/')) {
+          continue;
+        }
+
+        // Rethrow any other unexpected error
+        rethrow;
       }
-      rethrow;
     }
+
+    if (lastError != null) {
+      throw lastError;
+    }
+    throw Exception('Failed to generate embeddings with any available embedding model.');
   }
 
   @override
@@ -43,11 +71,13 @@ class GeminiDirectProvider implements AiProvider {
     required String userMessage,
   }) async* {
     final apiKey = await _getValidApiKey();
-    final model = GenerativeModel(
-      model: 'gemini-1.5-flash',
-      apiKey: apiKey,
-      systemInstruction: Content.system(systemPrompt),
-    );
+
+    // Prefer current Flash models; fall back through recent stable IDs.
+    final chatModels = [
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-3.5-flash',
+    ];
 
     final contents = <Content>[];
     for (final msg in history) {
@@ -59,19 +89,48 @@ class GeminiDirectProvider implements AiProvider {
     }
     contents.add(Content.text(userMessage));
 
-    try {
-      final responseStream = model.generateContentStream(contents);
-      await for (final chunk in responseStream) {
-        if (chunk.text != null && chunk.text!.isNotEmpty) {
-          yield chunk.text!;
+    Object? lastError;
+
+    for (final modelName in chatModels) {
+      try {
+        final model = GenerativeModel(
+          model: modelName,
+          apiKey: apiKey,
+          systemInstruction: Content.system(systemPrompt),
+        );
+
+        final responseStream = model.generateContentStream(contents);
+        await for (final chunk in responseStream) {
+          if (chunk.text != null && chunk.text!.isNotEmpty) {
+            yield chunk.text!;
+          }
         }
+        // Successfully completed stream with this model
+        return;
+      } catch (e) {
+        lastError = e;
+        final errorStr = e.toString().toLowerCase();
+
+        if (errorStr.contains('api_key') ||
+            errorStr.contains('unauthorized') ||
+            errorStr.contains('invalid api key') ||
+            errorStr.contains('api key not valid')) {
+          throw NoApiKeyException('Invalid Gemini API Key: $e');
+        }
+
+        if (errorStr.contains('not found') ||
+            errorStr.contains('not supported') ||
+            errorStr.contains('404') ||
+            errorStr.contains('models/')) {
+          continue;
+        }
+
+        rethrow;
       }
-    } catch (e) {
-      final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('api_key') || errorStr.contains('unauthorized') || errorStr.contains('invalid')) {
-        throw NoApiKeyException('Invalid Gemini API Key: $e');
-      }
-      rethrow;
+    }
+
+    if (lastError != null) {
+      throw lastError;
     }
   }
 }

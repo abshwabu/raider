@@ -24,15 +24,20 @@ class _AiSettingsScreenState extends ConsumerState<AiSettingsScreen> {
   }
 
   Future<void> _loadCurrentKey() async {
-    final aiSettings = ref.read(aiSettingsServiceProvider);
-    final key = await aiSettings.getByokKey();
-    if (mounted) {
-      if (key != null) {
+    try {
+      final aiSettings = ref.read(aiSettingsServiceProvider);
+      final key = await aiSettings.getByokKey();
+      if (mounted && key != null) {
         _keyController.text = key;
       }
-      setState(() {
-        _isLoading = false;
-      });
+    } catch (e) {
+      debugPrint('Error loading API key: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

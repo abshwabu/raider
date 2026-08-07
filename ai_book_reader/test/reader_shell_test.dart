@@ -12,6 +12,10 @@ import 'package:ai_book_reader/features/reader/reader_shell.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+import 'package:ai_book_reader/data/models/chunk.dart';
+import 'package:ai_book_reader/data/models/chat_session.dart';
+import 'package:ai_book_reader/data/models/chat_message.dart';
+
 class FakePathProviderPlatform extends PathProviderPlatform
     with MockPlatformInterfaceMixin {
   final String path;
@@ -40,7 +44,13 @@ void main() {
     PathProviderPlatform.instance = FakePathProviderPlatform(docsDir.path);
 
     isar = await Isar.open(
-      [BookSchema, ChapterSchema],
+      [
+        BookSchema,
+        ChapterSchema,
+        ChunkSchema,
+        ChatSessionSchema,
+        ChatMessageSchema,
+      ],
       directory: tempDir.path,
     );
     bookRepo = BookRepository(isar);
@@ -91,16 +101,17 @@ void main() {
     );
 
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.idle();
+    await tester.pump();
 
     // Verify AppBar title & Ask AI FAB
     expect(find.text('Shell Test Book'), findsOneWidget);
     expect(find.text('Ask AI'), findsOneWidget);
 
-    // Tap Ask AI FAB -> verify SnackBar appears
+    // Tap Ask AI FAB -> verify AiChatScreen bottom sheet opens
     await tester.tap(find.text('Ask AI'));
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('AI Chat feature coming in Phase 3'), findsOneWidget);
+    expect(find.textContaining('Ask AI — Shell Test Book'), findsOneWidget);
 
     // Tap Table of Contents icon -> verify Drawer opens with chapters
     await tester.tap(find.byIcon(Icons.format_list_bulleted_rounded));
