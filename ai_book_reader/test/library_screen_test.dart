@@ -61,11 +61,16 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('My Library'), findsOneWidget);
     expect(find.text('No books yet'), findsOneWidget);
-    expect(find.text('Tap the + button below to import your first book'), findsOneWidget);
+    expect(
+      find.text('Browse a folder to see supported books, then add the ones you want'),
+      findsOneWidget,
+    );
+    expect(find.text('Browse folder'), findsOneWidget);
   });
 
   testWidgets('LibraryScreen displays book cards when books exist', (WidgetTester tester) async {
@@ -99,7 +104,8 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Alpha PDF'), findsOneWidget);
     expect(find.text('Author Alpha'), findsOneWidget);
@@ -133,16 +139,19 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Book To Delete'), findsOneWidget);
 
     // Open overflow menu for the book
     await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Tap Delete option
     await tester.tap(find.text('Delete'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Confirm dialog appears
     expect(find.text('Delete Book'), findsOneWidget);
@@ -150,7 +159,8 @@ void main() {
 
     // Tap Delete in dialog
     await tester.tap(find.widgetWithText(ElevatedButton, 'Delete'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Verify book is removed from Isar & grid
     expect(find.text('Book To Delete'), findsNothing);

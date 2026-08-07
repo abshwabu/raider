@@ -61,6 +61,7 @@ void main() {
     // Verify that the Library title and empty state text appear
     expect(find.text('My Library'), findsOneWidget);
     expect(find.text('No books yet'), findsOneWidget);
-    expect(find.text('Import Book'), findsNWidgets(2)); // FAB + Empty state button
+    expect(find.text('Add Books'), findsOneWidget); // FAB
+    expect(find.text('Browse folder'), findsOneWidget); // Empty state CTA
   });
 }

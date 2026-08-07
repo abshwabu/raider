@@ -94,4 +94,48 @@ void main() {
     expect(allBooks.length, equals(3));
     expect(allBooks.map((b) => b.format), containsAll(['epub', 'txt', 'docx']));
   });
+
+  test('scanDirectoryForBooks finds supported files and skips unsupported', () async {
+    final booksDir = Directory('${tempDir.path}/my_books');
+    final nested = Directory('${booksDir.path}/fiction');
+    await nested.create(recursive: true);
+
+    await File('${booksDir.path}/Alpha.pdf').writeAsString('pdf');
+    await File('${nested.path}/Beta.epub').writeAsString('epub');
+    await File('${booksDir.path}/notes.md').writeAsString('markdown');
+    await File('${booksDir.path}/readme.txt').writeAsString('txt');
+
+    final found = await importService.scanDirectoryForBooks(booksDir.path);
+
+    expect(found.length, equals(3));
+    expect(found.map((b) => b.format), containsAll(['pdf', 'epub', 'txt']));
+    expect(found.every((b) => !b.alreadyImported), isTrue);
+    expect(found.first.title, equals('Alpha')); // sorted A-Z
+  });
+
+  test('scanDirectoryForBooks marks already imported files', () async {
+    final booksDir = Directory('${tempDir.path}/library_scan');
+    await booksDir.create(recursive: true);
+    final source = File('${booksDir.path}/Known Book.pdf');
+    await source.writeAsString('pdf');
+
+    await importService.importFile(source.path);
+
+    final found = await importService.scanDirectoryForBooks(booksDir.path);
+    expect(found.length, equals(1));
+    expect(found.single.alreadyImported, isTrue);
+  });
+
+  test('importFiles imports multiple selected paths', () async {
+    final file1 = File('${tempDir.path}/one.pdf');
+    final file2 = File('${tempDir.path}/two.epub');
+    await file1.writeAsString('pdf');
+    await file2.writeAsString('epub');
+
+    final imported = await importService.importFiles([file1.path, file2.path]);
+    expect(imported.length, equals(2));
+
+    final allBooks = await bookRepo.getAllBooks();
+    expect(allBooks.length, equals(2));
+  });
 }

@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 import '../../../../data/import/import_service.dart';
 import '../../../../data/local/book_repository.dart';
 import '../../../../data/models/book.dart';
+import '../widgets/browse_books_sheet.dart';
 
 enum BookSortOption {
   recentlyAdded('Recently Added'),
@@ -36,7 +38,118 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     super.dispose();
   }
 
-  Future<void> _handleImport() async {
+  Future<void> _importSelectedPaths(List<String> paths) async {
+    if (paths.isEmpty || _isImporting) return;
+
+    setState(() {
+      _isImporting = true;
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          paths.length == 1
+              ? 'Importing book...'
+              : 'Importing ${paths.length} books...',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      final importService = ref.read(importServiceProvider);
+      final importedBooks = await importService.importFiles(paths);
+
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      if (importedBooks.isNotEmpty) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Added ${importedBooks.length} book(s) to library'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('No books were imported')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Import failed: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImporting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleBrowseFolder() async {
+    if (_isImporting) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final importService = ref.read(importServiceProvider);
+
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Choose a folder to scan for books...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      final scan = await importService.pickFolderAndDiscoverBooks();
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+
+      if (scan == null) {
+        return; // user cancelled folder picker
+      }
+
+      if (scan.books.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('No supported book files found in that folder'),
+          ),
+        );
+        return;
+      }
+
+      final folderName = p.basename(scan.folderPath).isEmpty
+          ? scan.folderPath
+          : p.basename(scan.folderPath);
+
+      final selected = await BrowseBooksSheet.show(
+        context,
+        books: scan.books,
+        folderName: folderName,
+      );
+
+      if (selected != null && selected.isNotEmpty && mounted) {
+        await _importSelectedPaths(selected);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Browse failed: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handlePickFiles() async {
     if (_isImporting) return;
 
     setState(() {
@@ -81,6 +194,40 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         });
       }
     }
+  }
+
+  void _showAddBooksMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.folder_open),
+                title: const Text('Browse folder'),
+                subtitle: const Text('See all supported books and choose which to add'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleBrowseFolder();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: const Text('Pick files'),
+                subtitle: const Text('Select one or more book files directly'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handlePickFiles();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _confirmDeleteBook(Book book) async {
@@ -285,7 +432,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _handleImport,
+        onPressed: _isImporting ? null : _showAddBooksMenu,
         icon: _isImporting
             ? const SizedBox(
                 width: 20,
@@ -296,7 +443,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               )
             : const Icon(Icons.add),
-        label: Text(_isImporting ? 'Importing...' : 'Import Book'),
+        label: Text(_isImporting ? 'Importing...' : 'Add Books'),
       ),
     );
   }
@@ -322,7 +469,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Tap the + button below to import your first book',
+              'Browse a folder to see supported books, then add the ones you want',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -330,12 +477,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _handleImport,
-              icon: const Icon(Icons.add),
-              label: const Text('Import Book'),
+              onPressed: _isImporting ? null : _handleBrowseFolder,
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Browse folder'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: _isImporting ? null : _handlePickFiles,
+              child: const Text('Or pick files instead'),
             ),
           ],
         ),
