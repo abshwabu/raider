@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../data/local/ai_settings_service.dart';
@@ -478,6 +479,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   Widget _buildMessageBubble(ThemeData theme, ChatMessage message) {
     final isUser = message.role == ChatRole.user;
+    final textColor =
+        isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -501,14 +504,21 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                color: isUser ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
-                fontSize: 14,
-                height: 1.4,
+            if (isUser)
+              Text(
+                message.content,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              )
+            else
+              _buildMarkdownBody(
+                theme,
+                message.content,
+                textColor: textColor,
               ),
-            ),
             if (!isUser && message.citedChunkIds.isNotEmpty)
               _buildSourcesRow(message.citedChunkIds),
           ],
@@ -518,6 +528,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Widget _buildStreamingBubble(ThemeData theme) {
+    final textColor = theme.colorScheme.onSurface;
+
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -535,19 +547,87 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             bottomRight: Radius.circular(16),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _currentStreamingText.isEmpty ? 'Thinking...' : _currentStreamingText,
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontSize: 14,
-                height: 1.4,
-                fontStyle: _currentStreamingText.isEmpty ? FontStyle.italic : FontStyle.normal,
+        child: _currentStreamingText.isEmpty
+            ? Text(
+                'Thinking...',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                ),
+              )
+            : _buildMarkdownBody(
+                theme,
+                _currentStreamingText,
+                textColor: textColor,
               ),
+      ),
+    );
+  }
+
+  Widget _buildMarkdownBody(
+    ThemeData theme,
+    String data, {
+    required Color textColor,
+  }) {
+    final baseStyle = theme.textTheme.bodyMedium?.copyWith(
+          color: textColor,
+          fontSize: 14,
+          height: 1.4,
+        ) ??
+        TextStyle(color: textColor, fontSize: 14, height: 1.4);
+
+    return MarkdownBody(
+      data: data,
+      selectable: true,
+      softLineBreak: true,
+      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+        p: baseStyle,
+        a: baseStyle.copyWith(
+          color: theme.colorScheme.primary,
+          decoration: TextDecoration.underline,
+        ),
+        h1: baseStyle.copyWith(fontSize: 20, fontWeight: FontWeight.bold),
+        h2: baseStyle.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+        h3: baseStyle.copyWith(fontSize: 16, fontWeight: FontWeight.bold),
+        h4: baseStyle.copyWith(fontSize: 15, fontWeight: FontWeight.w600),
+        h5: baseStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+        h6: baseStyle.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+        strong: baseStyle.copyWith(fontWeight: FontWeight.bold),
+        em: baseStyle.copyWith(fontStyle: FontStyle.italic),
+        listBullet: baseStyle,
+        blockquote: baseStyle.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        blockquoteDecoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHigh,
+          border: Border(
+            left: BorderSide(color: theme.colorScheme.primary, width: 3),
+          ),
+        ),
+        code: baseStyle.copyWith(
+          fontFamily: 'monospace',
+          backgroundColor: theme.colorScheme.surfaceContainerHigh,
+          fontSize: 13,
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        codeblockPadding: const EdgeInsets.all(10),
+        horizontalRuleDecoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: theme.colorScheme.outlineVariant,
             ),
-          ],
+          ),
+        ),
+        tableHead: baseStyle.copyWith(fontWeight: FontWeight.bold),
+        tableBody: baseStyle,
+        tableBorder: TableBorder.all(
+          color: theme.colorScheme.outlineVariant,
+          width: 0.5,
         ),
       ),
     );

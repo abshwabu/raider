@@ -53,6 +53,7 @@ dependencies:
   html: ^0.15.4
   google_generative_ai: ^0.4.0
   dio: ^5.4.0
+  flutter_markdown_plus: ^1.0.12
 
 dev_dependencies:
   flutter_test:
