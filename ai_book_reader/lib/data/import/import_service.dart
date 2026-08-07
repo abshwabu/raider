@@ -89,6 +89,21 @@ class ImportService {
     return formatted.isEmpty ? 'Untitled Book' : formatted;
   }
 
+  static String? extensionOf(String filePath) {
+    final name = p.basename(filePath);
+    final dot = name.lastIndexOf('.');
+    if (dot <= 0 || dot >= name.length - 1) return null;
+    return name.substring(dot + 1).toLowerCase().trim();
+  }
+
+  static String normalizeFsPath(String rawPath) {
+    var path = rawPath.trim();
+    if (path.startsWith('file://')) {
+      path = Uri.parse(path).toFilePath();
+    }
+    return p.normalize(path);
+  }
+
   bool _isAlreadyImported(String sourcePath, List<Book> existingBooks) {
     final basename = p.basename(sourcePath);
     return existingBooks.any((book) {
@@ -97,70 +112,161 @@ class ImportService {
     });
   }
 
+  Future<DiscoverableBook?> _toDiscoverableBook(
+    String sourcePath,
+    List<Book> existingBooks,
+  ) async {
+    final path = normalizeFsPath(sourcePath);
+    final ext = extensionOf(path);
+    if (ext == null || !SupportedFormats.isSupported(ext)) {
+      return null;
+    }
+
+    int sizeBytes = 0;
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        sizeBytes = await file.length();
+      }
+    } catch (_) {}
+
+    return DiscoverableBook(
+      path: path,
+      title: formatTitleFromPath(path),
+      format: ext,
+      sizeBytes: sizeBytes,
+      alreadyImported: _isAlreadyImported(path, existingBooks),
+    );
+  }
+
   /// Recursively finds supported book files under [directoryPath].
   Future<List<DiscoverableBook>> scanDirectoryForBooks(
     String directoryPath, {
-    int maxDepth = 6,
+    int maxDepth = 8,
   }) async {
-    final root = Directory(directoryPath);
+    final rootPath = normalizeFsPath(directoryPath);
+    final root = Directory(rootPath);
     if (!await root.exists()) {
       return [];
     }
 
     final existingBooks = await bookRepository.getAllBooks();
     final found = <DiscoverableBook>[];
+    final rootParts = p.split(rootPath);
 
-    Future<void> walk(Directory dir, int depth) async {
-      if (depth > maxDepth) return;
-
-      await for (final entity in dir.list(followLinks: false)) {
+    try {
+      await for (final entity in root.list(recursive: true, followLinks: true)) {
+        final parts = p.split(entity.path);
         final name = p.basename(entity.path);
         if (name.startsWith('.')) continue;
 
-        if (entity is Directory) {
-          if (_skipDirNames.contains(name)) continue;
-          await walk(entity, depth + 1);
-          continue;
+        // Skip known noisy directories under the chosen root only.
+        final relativeParts = parts.length > rootParts.length
+            ? parts.sublist(rootParts.length)
+            : const <String>[];
+        if (relativeParts.any(_skipDirNames.contains)) continue;
+
+        // Limit how deep we walk relative to the chosen root.
+        final depth = parts.length - rootParts.length;
+        if (depth > maxDepth) continue;
+
+        final isFile = await FileSystemEntity.isFile(entity.path);
+        if (!isFile) continue;
+
+        final book = await _toDiscoverableBook(entity.path, existingBooks);
+        if (book != null) {
+          found.add(book);
         }
-
-        if (entity is! File) continue;
-
-        final ext = p.extension(entity.path).replaceAll('.', '').toLowerCase();
-        if (!SupportedFormats.isSupported(ext)) continue;
-
-        int sizeBytes = 0;
-        try {
-          sizeBytes = await entity.length();
-        } catch (_) {}
-
-        found.add(
-          DiscoverableBook(
-            path: entity.path,
-            title: formatTitleFromPath(entity.path),
-            format: ext,
-            sizeBytes: sizeBytes,
-            alreadyImported: _isAlreadyImported(entity.path, existingBooks),
-          ),
-        );
       }
+    } on FileSystemException {
+      // Common on Android scoped storage / sandboxed folders.
+      return found;
     }
 
-    await walk(root, 0);
     found.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
     return found;
   }
 
-  /// Opens a folder picker, then scans for supported book files.
-  /// Returns null if the user cancels the folder picker.
-  Future<FolderScanResult?> pickFolderAndDiscoverBooks() async {
+  /// Opens a multi-select dialog filtered to supported book types.
+  /// This is the reliable cross-platform way to "see available books".
+  Future<FolderScanResult?> pickSupportedBooks() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: SupportedFormats.extensions,
+      dialogTitle: 'Select books to add',
+    );
+
+    if (result == null) {
+      return null;
+    }
+
+    final existingBooks = await bookRepository.getAllBooks();
+    final books = <DiscoverableBook>[];
+    for (final file in result.files) {
+      final path = file.path;
+      if (path == null || path.trim().isEmpty) continue;
+      final book = await _toDiscoverableBook(path, existingBooks);
+      if (book != null) {
+        books.add(book);
+      }
+    }
+
+    books.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+    final folderPath = books.isEmpty ? 'selection' : p.dirname(books.first.path);
+    return FolderScanResult(folderPath: folderPath, books: books);
+  }
+
+  /// Opens a folder picker and scans for supported books.
+  /// If the OS won't let us list the folder (common on Android), falls back to
+  /// a multi-select file picker filtered to supported types.
+  Future<FolderScanResult?> pickFolderAndDiscoverBooks({
+    bool allowFilePickerFallback = true,
+  }) async {
     final directoryPath = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Choose a folder with books',
     );
     if (directoryPath == null) {
       return null;
     }
-    final books = await scanDirectoryForBooks(directoryPath);
-    return FolderScanResult(folderPath: directoryPath, books: books);
+
+    final normalized = normalizeFsPath(directoryPath);
+    final books = await scanDirectoryForBooks(normalized);
+    if (books.isNotEmpty) {
+      return FolderScanResult(folderPath: normalized, books: books);
+    }
+
+    if (!allowFilePickerFallback) {
+      return FolderScanResult(folderPath: normalized, books: const []);
+    }
+
+    // Folder path may be unreadable (scoped storage / portals). Let the user
+    // pick supported files from that location via the system file dialog.
+    final fallback = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: SupportedFormats.extensions,
+      initialDirectory: normalized,
+      dialogTitle: 'Select books from folder',
+    );
+    if (fallback == null) {
+      return FolderScanResult(folderPath: normalized, books: const []);
+    }
+
+    final existingBooks = await bookRepository.getAllBooks();
+    final discovered = <DiscoverableBook>[];
+    for (final file in fallback.files) {
+      final path = file.path;
+      if (path == null || path.trim().isEmpty) continue;
+      final book = await _toDiscoverableBook(path, existingBooks);
+      if (book != null) {
+        discovered.add(book);
+      }
+    }
+    discovered.sort(
+      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+    );
+    return FolderScanResult(folderPath: normalized, books: discovered);
   }
 
   Future<List<Book>> importFiles(List<String> sourcePaths) async {
@@ -182,9 +288,9 @@ class ImportService {
       throw FileSystemException('Source file does not exist', sourcePath);
     }
 
-    final ext = p.extension(sourcePath).replaceAll('.', '').toLowerCase();
-    if (!SupportedFormats.isSupported(ext)) {
-      throw UnsupportedFormatException('Extension .$ext is not supported');
+    final ext = extensionOf(sourcePath);
+    if (ext == null || !SupportedFormats.isSupported(ext)) {
+      throw UnsupportedFormatException('Extension .${ext ?? '?'} is not supported');
     }
 
     final appDocDir = await getApplicationDocumentsDirectory();

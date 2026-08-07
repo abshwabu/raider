@@ -93,6 +93,58 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
   }
 
+  Future<void> _showBrowseResult(FolderScanResult scan, {String? label}) async {
+    if (scan.books.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No supported books selected. Supported: pdf, epub, txt, docx, cbz, cbr, mobi, azw3',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final folderName = label ??
+        (p.basename(scan.folderPath).isEmpty
+            ? scan.folderPath
+            : p.basename(scan.folderPath));
+
+    final selected = await BrowseBooksSheet.show(
+      context,
+      books: scan.books,
+      folderName: folderName,
+    );
+
+    if (selected != null && selected.isNotEmpty && mounted) {
+      await _importSelectedPaths(selected);
+    }
+  }
+
+  Future<void> _handleBrowseBooks() async {
+    if (_isImporting) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final importService = ref.read(importServiceProvider);
+
+    try {
+      // Multi-select filtered to supported types — works when folder listing cannot.
+      final scan = await importService.pickSupportedBooks();
+      if (!mounted) return;
+      if (scan == null) return;
+      await _showBrowseResult(scan, label: 'selected files');
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Browse failed: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _handleBrowseFolder() async {
     if (_isImporting) return;
 
@@ -101,8 +153,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     messenger.showSnackBar(
       const SnackBar(
-        content: Text('Choose a folder to scan for books...'),
-        duration: Duration(seconds: 2),
+        content: Text('Choose a folder… if it cannot be listed, you can pick files next'),
+        duration: Duration(seconds: 3),
       ),
     );
 
@@ -112,31 +164,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       messenger.hideCurrentSnackBar();
 
       if (scan == null) {
-        return; // user cancelled folder picker
-      }
-
-      if (scan.books.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('No supported book files found in that folder'),
-          ),
-        );
         return;
       }
 
-      final folderName = p.basename(scan.folderPath).isEmpty
-          ? scan.folderPath
-          : p.basename(scan.folderPath);
-
-      final selected = await BrowseBooksSheet.show(
-        context,
-        books: scan.books,
-        folderName: folderName,
-      );
-
-      if (selected != null && selected.isNotEmpty && mounted) {
-        await _importSelectedPaths(selected);
-      }
+      await _showBrowseResult(scan);
     } catch (e) {
       if (!mounted) return;
       messenger.hideCurrentSnackBar();
@@ -205,18 +236,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                leading: const Icon(Icons.library_books_outlined),
+                title: const Text('Browse books'),
+                subtitle: const Text('See supported files and choose which to add'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleBrowseBooks();
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.folder_open),
-                title: const Text('Browse folder'),
-                subtitle: const Text('See all supported books and choose which to add'),
+                title: const Text('Scan folder'),
+                subtitle: const Text('Try listing a whole folder (may be limited by the OS)'),
                 onTap: () {
                   Navigator.pop(context);
                   _handleBrowseFolder();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: const Text('Pick files'),
-                subtitle: const Text('Select one or more book files directly'),
+                leading: const Icon(Icons.file_download_outlined),
+                title: const Text('Import files now'),
+                subtitle: const Text('Pick files and add them immediately'),
                 onTap: () {
                   Navigator.pop(context);
                   _handlePickFiles();
@@ -469,7 +509,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Browse a folder to see supported books, then add the ones you want',
+              'Browse supported book files, then add the ones you want',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -477,9 +517,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _isImporting ? null : _handleBrowseFolder,
-              icon: const Icon(Icons.folder_open),
-              label: const Text('Browse folder'),
+              onPressed: _isImporting ? null : _handleBrowseBooks,
+              icon: const Icon(Icons.library_books_outlined),
+              label: const Text('Browse books'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
@@ -487,7 +527,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             const SizedBox(height: 12),
             TextButton(
               onPressed: _isImporting ? null : _handlePickFiles,
-              child: const Text('Or pick files instead'),
+              child: const Text('Or import files immediately'),
             ),
           ],
         ),
