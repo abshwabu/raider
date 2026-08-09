@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/annotation.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
 import '../models/chat_message.dart';
@@ -24,6 +25,7 @@ class IsarService {
           ChatSessionSchema,
           ChatMessageSchema,
           StudioArtifactSchema,
+          AnnotationSchema,
         ],
         directory: path,
         inspector: false,

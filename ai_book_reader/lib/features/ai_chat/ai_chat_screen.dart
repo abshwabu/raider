@@ -14,11 +14,15 @@ import '../ai/provider/ai_provider.dart';
 class AiChatScreen extends ConsumerStatefulWidget {
   final int bookId;
   final String bookTitle;
+  final String? selectedPassage;
+  final int? chapterId;
 
   const AiChatScreen({
     super.key,
     required this.bookId,
     required this.bookTitle,
+    this.selectedPassage,
+    this.chapterId,
   });
 
   @override
@@ -188,6 +192,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       final stream = chatService.sendMessage(
         bookId: widget.bookId,
         question: question,
+        selectedPassage: widget.selectedPassage,
       );
 
       await for (final chunkText in stream) {
@@ -278,7 +283,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Ask AI — ${widget.bookTitle}',
+                            widget.selectedPassage != null &&
+                                    widget.selectedPassage!.trim().isNotEmpty
+                                ? 'Ask AI about selection'
+                                : 'Ask AI — ${widget.bookTitle}',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
@@ -443,12 +451,18 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Ask anything about this book',
+              widget.selectedPassage != null &&
+                      widget.selectedPassage!.trim().isNotEmpty
+                  ? 'Ask about the selected passage'
+                  : 'Ask anything about this book',
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Your questions will be answered using grounded excerpts directly from "${widget.bookTitle}".',
+              widget.selectedPassage != null &&
+                      widget.selectedPassage!.trim().isNotEmpty
+                  ? 'Answers prioritize your selection, with optional context from "${widget.bookTitle}".'
+                  : 'Your questions will be answered using grounded excerpts directly from "${widget.bookTitle}".',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
@@ -677,6 +691,9 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 
   Widget _buildInputBar(ThemeData theme) {
+    final passage = widget.selectedPassage?.trim();
+    final hasPassage = passage != null && passage.isNotEmpty;
+
     return Container(
       padding: EdgeInsets.only(
         left: 16,
@@ -692,30 +709,70 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _textController,
-              enabled: !_isStreaming,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _sendMessage(),
-              decoration: const InputDecoration(
-                hintText: 'Ask a question about this book...',
-                border: InputBorder.none,
+          if (hasPassage) ...[
+            Container(
+              margin: const EdgeInsets.only(right: 8, bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondaryContainer.withAlpha(120),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.format_quote_rounded,
+                    size: 18,
+                    color: theme.colorScheme.onSecondaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      passage.length > 160
+                          ? '${passage.substring(0, 160)}…'
+                          : passage,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          IconButton(
-            icon: _isStreaming
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.send_rounded),
-            color: theme.colorScheme.primary,
-            onPressed: _isStreaming ? null : () => _sendMessage(),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _textController,
+                  enabled: !_isStreaming,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                  decoration: InputDecoration(
+                    hintText: hasPassage
+                        ? 'Ask about this passage…'
+                        : 'Ask a question about this book...',
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: _isStreaming
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded),
+                color: theme.colorScheme.primary,
+                onPressed: _isStreaming ? null : () => _sendMessage(),
+              ),
+            ],
           ),
         ],
       ),

@@ -40,6 +40,7 @@ class ChatService {
   Stream<String> sendMessage({
     required int bookId,
     required String question,
+    String? selectedPassage,
   }) async* {
     final book = await bookRepository.getBook(bookId);
     if (book == null) {
@@ -58,19 +59,30 @@ class ChatService {
     await chatRepository.addMessage(userMsg);
 
     // Retrieve relevant chunks via similarity search
+    final retrievalQuery = selectedPassage != null && selectedPassage.trim().isNotEmpty
+        ? '$question\n\n$selectedPassage'
+        : question;
     final chunks = await retrievalService.retrieveRelevantChunks(
       bookId: bookId,
-      question: question,
+      question: retrievalQuery,
       topK: 6,
     );
 
     final citedChunkIds = chunks.map((c) => c.id).toList();
 
     // Construct prompts
-    final systemPrompt = promptBuilder.buildSystemPrompt(book: book);
+    final hasPassage =
+        selectedPassage != null && selectedPassage.trim().isNotEmpty;
+    final systemPrompt = hasPassage
+        ? promptBuilder.buildSelectionSystemPrompt(
+            book: book,
+            selectedPassage: selectedPassage,
+          )
+        : promptBuilder.buildSystemPrompt(book: book);
     final userTurnWithContext = promptBuilder.buildUserTurnWithContext(
       question: question,
       retrievedChunks: chunks,
+      selectedPassage: selectedPassage,
     );
 
     // Fetch prior messages for conversational context (cap at last 10)

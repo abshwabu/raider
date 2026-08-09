@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/local/book_repository.dart';
 import '../../../data/models/book.dart';
 import '../../../data/models/chapter.dart';
+import 'selection/html_plain_text.dart';
+import 'selection/selectable_annotated_text.dart';
 
 class HtmlChapterView extends ConsumerStatefulWidget {
   final Book book;
@@ -70,6 +71,7 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     }
 
     final currentChapter = widget.chapters[_currentChapterIndex];
+    final plainText = htmlToPlainText(currentChapter.content);
 
     return Column(
       children: [
@@ -87,8 +89,15 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
                       ),
                 ),
                 const Divider(height: 24),
-                Html(
-                  data: currentChapter.content,
+                SelectableAnnotatedText(
+                  bookId: widget.book.id,
+                  bookTitle: widget.book.title,
+                  chapterId: currentChapter.id,
+                  text: plainText,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        height: 1.6,
+                      ) ??
+                      const TextStyle(fontSize: 16, height: 1.6),
                 ),
               ],
             ),

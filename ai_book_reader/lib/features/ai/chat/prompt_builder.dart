@@ -24,28 +24,64 @@ Guiding Principles:
   String buildUserTurnWithContext({
     required String question,
     required List<Chunk> retrievedChunks,
+    String? selectedPassage,
   }) {
-    if (retrievedChunks.isEmpty) {
-      return '''No relevant excerpts were found for this query.
+    final buffer = StringBuffer();
 
-User Question: $question''';
+    if (selectedPassage != null && selectedPassage.trim().isNotEmpty) {
+      buffer.writeln('Selected Passage (primary context):');
+      buffer.writeln(selectedPassage.trim());
+      buffer.writeln();
     }
 
-    final buffer = StringBuffer();
-    buffer.writeln('Relevant Book Excerpts:');
-    buffer.writeln();
-
-    for (int i = 0; i < retrievedChunks.length; i++) {
-      final chunk = retrievedChunks[i];
-      buffer.writeln('[Excerpt ${i + 1} | Chunk ID: ${chunk.id} | Chapter ID: ${chunk.chapterId}]');
-      buffer.writeln(chunk.text);
+    if (retrievedChunks.isEmpty) {
+      if (selectedPassage == null || selectedPassage.trim().isEmpty) {
+        buffer.writeln('No relevant excerpts were found for this query.');
+        buffer.writeln();
+      }
+    } else {
+      buffer.writeln('Relevant Book Excerpts:');
       buffer.writeln();
+
+      for (int i = 0; i < retrievedChunks.length; i++) {
+        final chunk = retrievedChunks[i];
+        buffer.writeln(
+          '[Excerpt ${i + 1} | Chunk ID: ${chunk.id} | Chapter ID: ${chunk.chapterId}]',
+        );
+        buffer.writeln(chunk.text);
+        buffer.writeln();
+      }
     }
 
     buffer.writeln('User Question:');
     buffer.writeln(question.trim());
 
     return buffer.toString();
+  }
+
+  String buildSelectionSystemPrompt({
+    required Book book,
+    required String selectedPassage,
+  }) {
+    final authorStr = (book.author != null && book.author!.isNotEmpty)
+        ? ' by ${book.author}'
+        : '';
+
+    return '''You are an intelligent, thoughtful reading companion for the book "${book.title}"$authorStr.
+
+The reader has selected a specific passage. Treat that selected passage as the primary context for your answers. You may also use additional book excerpts when helpful.
+
+Guiding Principles:
+1. Prioritize the selected passage when answering.
+2. Use additional book excerpts only to clarify or expand, and do not invent facts outside the provided material.
+3. If the provided material is insufficient, say so clearly instead of speculating.
+4. Keep your tone helpful, clear, and appropriate for a literary reading companion.
+5. When relevant, quote or refer to the selected passage naturally.
+
+Selected passage:
+"""
+${selectedPassage.trim()}
+"""''';
   }
 
   String buildStudioSystemPrompt({

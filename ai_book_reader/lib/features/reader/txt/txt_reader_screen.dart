@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/local/book_repository.dart';
 import '../../../data/models/book.dart';
 import '../../../data/models/chapter.dart';
+import '../shared/selection/selectable_annotated_text.dart';
 
 enum TxtReaderTheme {
   light(
@@ -215,8 +216,11 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
                     height: 24,
                     color: _readerTheme.textColor.withValues(alpha: 0.3),
                   ),
-                  SelectableText(
-                    currentChapter.content,
+                  SelectableAnnotatedText(
+                    bookId: widget.book.id,
+                    bookTitle: widget.book.title,
+                    chapterId: currentChapter.id,
+                    text: currentChapter.content,
                     style: TextStyle(
                       fontSize: _fontSize,
                       height: 1.6,
