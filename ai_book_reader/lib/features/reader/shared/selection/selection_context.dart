@@ -15,8 +15,5 @@ class SelectionContext {
     required this.endOffset,
   });
 
-  bool get isValid =>
-      selectedText.trim().isNotEmpty &&
-      startOffset >= 0 &&
-      endOffset > startOffset;
+  bool get isValid => selectedText.trim().isNotEmpty;
 }

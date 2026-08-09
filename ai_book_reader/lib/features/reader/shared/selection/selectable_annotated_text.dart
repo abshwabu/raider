@@ -33,7 +33,6 @@ class SelectableAnnotatedText extends ConsumerStatefulWidget {
 class _SelectableAnnotatedTextState
     extends ConsumerState<SelectableAnnotatedText> {
   List<Annotation> _annotations = [];
-  bool _loading = true;
   final List<TapGestureRecognizer> _recognizers = [];
 
   @override
@@ -66,14 +65,12 @@ class _SelectableAnnotatedTextState
   }
 
   Future<void> _loadAnnotations() async {
-    setState(() => _loading = true);
     final list = await ref
         .read(annotationRepositoryProvider)
         .getForChapter(widget.bookId, widget.chapterId);
     if (!mounted) return;
     setState(() {
       _annotations = list;
-      _loading = false;
     });
   }
 
@@ -88,10 +85,6 @@ class _SelectableAnnotatedTextState
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _annotations.isEmpty) {
-      return SelectableText(widget.text, style: widget.style);
-    }
-
     final staleRecognizers = List<TapGestureRecognizer>.of(_recognizers);
     _recognizers.clear();
     final span = HighlightTextSpanBuilder.build(
@@ -109,6 +102,7 @@ class _SelectableAnnotatedTextState
       });
     }
 
+    // Always attach the custom menu (even while annotations are loading).
     return SelectableText.rich(
       span,
       contextMenuBuilder: (context, editableTextState) {

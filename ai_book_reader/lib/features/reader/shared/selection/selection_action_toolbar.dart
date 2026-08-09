@@ -1,122 +1,81 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../data/local/annotation_repository.dart';
-import '../../../../data/models/annotation.dart';
-import '../../../ai_chat/ai_chat_screen.dart';
-import 'comment_sheet.dart';
-import 'dictionary_sheet.dart';
-import 'highlight_color_picker.dart';
+import 'package:flutter/services.dart';
+import 'selection_actions.dart';
 import 'selection_context.dart';
-import 'translate_sheet.dart';
 
 typedef AnnotationsChanged = Future<void> Function();
 
-/// Builds an adaptive selection toolbar with reader actions.
+/// Builds a Material selection toolbar with reader actions.
 Widget buildSelectionActionToolbar({
   required BuildContext context,
   required EditableTextState editableTextState,
-  required SelectionContext Function(String selected, int start, int end) buildContext,
+  required SelectionContext Function(String selected, int start, int end)
+      buildContext,
   required AnnotationsChanged onAnnotationsChanged,
 }) {
   final value = editableTextState.textEditingValue;
   final selection = value.selection;
-  final buttonItems = <ContextMenuButtonItem>[
-    ...editableTextState.contextMenuButtonItems,
-  ];
 
+  SelectionContext? selCtx;
   if (selection.isValid && !selection.isCollapsed) {
     final start = selection.start;
     final end = selection.end;
-    final selected = value.text.substring(start, end);
-    final selCtx = buildContext(selected, start, end);
-
-    if (selCtx.isValid) {
-      buttonItems.addAll([
-        ContextMenuButtonItem(
-          label: 'Highlight',
-          onPressed: () async {
-            ContextMenuController.removeAny();
-            final color = await showHighlightColorPicker(context);
-            if (color == null || !context.mounted) return;
-            await _saveHighlight(context, selCtx, color);
-            await onAnnotationsChanged();
-          },
-        ),
-        ContextMenuButtonItem(
-          label: 'Comment',
-          onPressed: () async {
-            ContextMenuController.removeAny();
-            final saved = await showCommentSheet(
-              context: context,
-              selection: selCtx,
-            );
-            if (saved == true) await onAnnotationsChanged();
-          },
-        ),
-        ContextMenuButtonItem(
-          label: 'Translate',
-          onPressed: () {
-            ContextMenuController.removeAny();
-            showTranslateSheet(
-              context: context,
-              selectedText: selCtx.selectedText,
-            );
-          },
-        ),
-        ContextMenuButtonItem(
-          label: 'Dictionary',
-          onPressed: () {
-            ContextMenuController.removeAny();
-            showDictionarySheet(
-              context: context,
-              selectedText: selCtx.selectedText,
-            );
-          },
-        ),
-        ContextMenuButtonItem(
-          label: 'Ask AI',
-          onPressed: () {
-            ContextMenuController.removeAny();
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) => AiChatScreen(
-                bookId: selCtx.bookId,
-                bookTitle: selCtx.bookTitle,
-                selectedPassage: selCtx.selectedText,
-                chapterId: selCtx.chapterId,
-              ),
-            );
-          },
-        ),
-      ]);
+    if (start >= 0 && end <= value.text.length && end > start) {
+      final selected = value.text.substring(start, end);
+      final built = buildContext(selected, start, end);
+      if (built.isValid) selCtx = built;
     }
   }
 
-  return AdaptiveTextSelectionToolbar.buttonItems(
-    anchors: editableTextState.contextMenuAnchors,
-    buttonItems: buttonItems,
-  );
-}
+  final anchors = editableTextState.contextMenuAnchors;
+  final actions = <(SelectionAction, String)>[
+    (SelectionAction.copy, 'Copy'),
+    (SelectionAction.highlight, 'Highlight'),
+    (SelectionAction.comment, 'Comment'),
+    (SelectionAction.translate, 'Translate'),
+    (SelectionAction.dictionary, 'Dictionary'),
+    (SelectionAction.askAi, 'Ask AI'),
+  ];
 
-Future<void> _saveHighlight(
-  BuildContext context,
-  SelectionContext selCtx,
-  AnnotationColor color,
-) async {
-  final container = ProviderScope.containerOf(context);
-  final repo = container.read(annotationRepositoryProvider);
-  final now = DateTime.now();
-  final annotation = Annotation()
-    ..bookId = selCtx.bookId
-    ..chapterId = selCtx.chapterId
-    ..selectedText = selCtx.selectedText
-    ..startOffset = selCtx.startOffset
-    ..endOffset = selCtx.endOffset
-    ..color = color
-    ..comment = null
-    ..createdAt = now
-    ..updatedAt = now;
-  await repo.save(annotation);
+  Widget button(int index, int total, SelectionAction action, String label) {
+    return TextSelectionToolbarTextButton(
+      padding: TextSelectionToolbarTextButton.getPadding(index, total),
+      onPressed: selCtx == null
+          ? null
+          : () async {
+              ContextMenuController.removeAny();
+              final ctx = selCtx!;
+              if (action == SelectionAction.copy) {
+                await Clipboard.setData(ClipboardData(text: ctx.selectedText));
+                editableTextState.hideToolbar();
+                return;
+              }
+              await handleSelectionAction(
+                context: context,
+                action: action,
+                selection: ctx,
+                onAnnotationsChanged: onAnnotationsChanged,
+                clearSelection: () {
+                  editableTextState.userUpdateTextEditingValue(
+                    value.copyWith(
+                      selection: TextSelection.collapsed(offset: selection.end),
+                    ),
+                    SelectionChangedCause.toolbar,
+                  );
+                  editableTextState.hideToolbar();
+                },
+              );
+            },
+      child: Text(label),
+    );
+  }
+
+  return TextSelectionToolbar(
+    anchorAbove: anchors.primaryAnchor,
+    anchorBelow: anchors.secondaryAnchor ?? anchors.primaryAnchor,
+    children: [
+      for (var i = 0; i < actions.length; i++)
+        button(i, actions.length, actions[i].$1, actions[i].$2),
+    ],
+  );
 }
