@@ -101,7 +101,7 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
 
   void _onScroll() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 250), _saveCurrentPosition);
+    _debounceTimer = Timer(const Duration(milliseconds: 800), _saveCurrentPosition);
   }
 
   void _restoreScrollPosition() {
@@ -285,6 +285,9 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
               onTap: widget.onTapBody,
               child: SingleChildScrollView(
                 controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

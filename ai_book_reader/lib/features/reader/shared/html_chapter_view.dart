@@ -34,7 +34,8 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
   late final ScrollController _scrollController;
   int _currentChapterIndex = 0;
   Timer? _debounceTimer;
-  double _inChapterProgress = 0.0;
+  final ValueNotifier<double> _inChapterProgressNotifier = ValueNotifier<double>(0.0);
+  final Map<int, String> _plainTextCache = {};
 
   int get currentChapterIndex => _currentChapterIndex;
 
@@ -58,6 +59,12 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     _scrollController = ScrollController(initialScrollOffset: initialOffset);
     _scrollController.addListener(_onScroll);
 
+    final savedFraction = positionService.getChapterScrollFractionSync(
+      widget.book.id,
+      _currentChapterIndex,
+    );
+    _inChapterProgressNotifier.value = savedFraction;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _restoreScrollPosition();
     });
@@ -69,6 +76,7 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     _saveCurrentPosition();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _inChapterProgressNotifier.dispose();
     super.dispose();
   }
 
@@ -77,14 +85,12 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     final maxExtent = _scrollController.position.maxScrollExtent;
     if (maxExtent > 0) {
       final fraction = (_scrollController.offset / maxExtent).clamp(0.0, 1.0);
-      if ((fraction - _inChapterProgress).abs() > 0.01) {
-        setState(() {
-          _inChapterProgress = fraction;
-        });
+      if ((fraction - _inChapterProgressNotifier.value).abs() >= 0.01) {
+        _inChapterProgressNotifier.value = fraction;
       }
     }
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 250), _saveCurrentPosition);
+    _debounceTimer = Timer(const Duration(milliseconds: 800), _saveCurrentPosition);
   }
 
   void _restoreScrollPosition() {
@@ -115,9 +121,7 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
         _scrollController.jumpTo(target);
       }
       if (maxExtent > 0) {
-        setState(() {
-          _inChapterProgress = (_scrollController.offset / maxExtent).clamp(0.0, 1.0);
-        });
+        _inChapterProgressNotifier.value = (_scrollController.offset / maxExtent).clamp(0.0, 1.0);
       }
     }
 
@@ -139,6 +143,8 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
 
     final positionService = ref.read(readingPositionServiceProvider);
     final savedOffset = positionService.getChapterScrollOffsetSync(widget.book.id, index);
+    final savedFraction = positionService.getChapterScrollFractionSync(widget.book.id, index);
+    _inChapterProgressNotifier.value = savedFraction;
 
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(savedOffset);
@@ -175,6 +181,14 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     ref.read(bookRepositoryProvider).updateReadingProgress(widget.book.id, progress);
   }
 
+  String _getPlainText(int chapterIndex) {
+    if (chapterIndex < 0 || chapterIndex >= widget.chapters.length) return '';
+    return _plainTextCache.putIfAbsent(
+      chapterIndex,
+      () => htmlToPlainText(widget.chapters[chapterIndex].content),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.chapters.isEmpty) {
@@ -184,7 +198,7 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     }
 
     final currentChapter = widget.chapters[_currentChapterIndex];
-    final plainText = htmlToPlainText(currentChapter.content);
+    final plainText = _getPlainText(_currentChapterIndex);
     final theme = Theme.of(context);
 
     return Column(
@@ -194,8 +208,11 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
             behavior: HitTestBehavior.translucent,
             onTap: widget.onTapBody,
             child: SingleChildScrollView(
-              key: PageStorageKey('html_chapter_${widget.book.id}_$_currentChapterIndex'),
+              key: ValueKey('html_chapter_${widget.book.id}_$_currentChapterIndex'),
               controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,53 +242,58 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
         ),
         // In-chapter reading progress and navigation controls (collapsible during reading)
         AnimatedSize(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
           child: widget.showControls
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LinearProgressIndicator(
-                      value: _inChapterProgress.clamp(0.0, 1.0),
-                      minHeight: 2.5,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        theme.colorScheme.primary.withAlpha(200),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.chevron_left_rounded),
-                            tooltip: 'Previous Chapter',
-                            onPressed: _currentChapterIndex > 0
-                                ? () => jumpToChapter(_currentChapterIndex - 1)
-                                : null,
+              ? ValueListenableBuilder<double>(
+                  valueListenable: _inChapterProgressNotifier,
+                  builder: (context, inChapterProgress, _) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LinearProgressIndicator(
+                          value: inChapterProgress.clamp(0.0, 1.0),
+                          minHeight: 2.5,
+                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            theme.colorScheme.primary.withAlpha(200),
                           ),
-                          Expanded(
-                            child: Text(
-                              'Chapter ${_currentChapterIndex + 1} of ${widget.chapters.length} · ${(_inChapterProgress * 100).round()}%',
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.chevron_left_rounded),
+                                tooltip: 'Previous Chapter',
+                                onPressed: _currentChapterIndex > 0
+                                    ? () => jumpToChapter(_currentChapterIndex - 1)
+                                    : null,
                               ),
-                            ),
+                              Expanded(
+                                child: Text(
+                                  'Chapter ${_currentChapterIndex + 1} of ${widget.chapters.length} · ${(inChapterProgress * 100).round()}%',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.chevron_right_rounded),
+                                tooltip: 'Next Chapter',
+                                onPressed: _currentChapterIndex < widget.chapters.length - 1
+                                    ? () => jumpToChapter(_currentChapterIndex + 1)
+                                    : null,
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.chevron_right_rounded),
-                            tooltip: 'Next Chapter',
-                            onPressed: _currentChapterIndex < widget.chapters.length - 1
-                                ? () => jumpToChapter(_currentChapterIndex + 1)
-                                : null,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                        ),
+                      ],
+                    );
+                  },
                 )
               : const SizedBox.shrink(),
         ),
