@@ -1,6 +1,6 @@
 {
-    "name": "ai_book_reader",
-    "short_name": "ai_book_reader",
+    "name": "Raider",
+    "short_name": "Raider",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

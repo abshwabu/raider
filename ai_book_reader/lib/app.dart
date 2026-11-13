@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'features/library/presentation/screens/library_screen.dart';
 import 'features/reader/presentation/screens/reader_screen.dart';
-
 import 'features/settings/ai_settings_screen.dart';
+import 'features/splash/presentation/screens/splash_screen.dart';
 
 final _router = GoRouter(
-  initialLocation: '/library',
+  initialLocation: '/splash',
   routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) => const SplashScreen(),
+    ),
     GoRoute(
       path: '/library',
       builder: (context, state) => const LibraryScreen(),
@@ -33,7 +38,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'AI Book Reader',
+      title: AppConstants.appName,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,

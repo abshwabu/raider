@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
@@ -57,6 +58,14 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+
+    // Verify that the splash screen displays the Raider brand
+    expect(find.text('RAIDER'), findsOneWidget);
+    expect(find.text('AI BOOK READER'), findsOneWidget);
+
+    // Pump past the splash duration to transition to LibraryScreen
+    await tester.pump(const Duration(milliseconds: 1400));
+    await tester.pumpAndSettle();
 
     // Verify that the Library title and empty state text appear
     expect(find.text('My Library'), findsOneWidget);
