@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/models/chapter.dart';
 
-class ChapterListDrawer extends StatelessWidget {
+class ChapterListDrawer extends StatefulWidget {
   final String bookTitle;
   final List<Chapter> chapters;
   final int currentChapterIndex;
@@ -14,6 +14,28 @@ class ChapterListDrawer extends StatelessWidget {
     required this.currentChapterIndex,
     required this.onChapterSelected,
   });
+
+  @override
+  State<ChapterListDrawer> createState() => _ChapterListDrawerState();
+}
+
+class _ChapterListDrawerState extends State<ChapterListDrawer> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialOffset = (widget.currentChapterIndex > 2)
+        ? ((widget.currentChapterIndex - 1) * 56.0)
+        : 0.0;
+    _scrollController = ScrollController(initialScrollOffset: initialOffset);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +55,7 @@ class ChapterListDrawer extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    bookTitle,
+                    widget.bookTitle,
                     style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -42,7 +64,7 @@ class ChapterListDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${chapters.length} chapters / sections',
+                    '${widget.chapters.length} chapters / sections',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -50,13 +72,14 @@ class ChapterListDrawer extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: chapters.isEmpty
+            child: widget.chapters.isEmpty
                 ? const Center(child: Text('No chapters available'))
                 : ListView.builder(
-                    itemCount: chapters.length,
+                    controller: _scrollController,
+                    itemCount: widget.chapters.length,
                     itemBuilder: (context, index) {
-                      final isSelected = index == currentChapterIndex;
-                      final chapter = chapters[index];
+                      final isSelected = index == widget.currentChapterIndex;
+                      final chapter = widget.chapters[index];
 
                       return ListTile(
                         selected: isSelected,
@@ -75,7 +98,7 @@ class ChapterListDrawer extends StatelessWidget {
                         ),
                         onTap: () {
                           Navigator.of(context).pop(); // Close drawer
-                          onChapterSelected(index, chapter);
+                          widget.onChapterSelected(index, chapter);
                         },
                       );
                     },

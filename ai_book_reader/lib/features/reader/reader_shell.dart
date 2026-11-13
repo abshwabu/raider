@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/book_repository.dart';
 import '../../data/local/chapter_repository.dart';
+import '../../data/local/reading_position_service.dart';
 import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
 import '../ai/chunking/chunking_service.dart';
@@ -128,10 +129,13 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
       }
 
       int initialChapterIndex = 0;
-      if (chapters.isNotEmpty && book.readingProgress > 0) {
-        initialChapterIndex = (book.readingProgress * chapters.length)
-            .floor()
-            .clamp(0, chapters.length - 1);
+      if (chapters.isNotEmpty) {
+        final positionService = ref.read(readingPositionServiceProvider);
+        initialChapterIndex = positionService.getLastChapterIndexSync(
+          book.id,
+          fallbackProgress: book.readingProgress,
+          totalChapters: chapters.length,
+        );
       }
 
       setState(() {
@@ -179,18 +183,33 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _epubKey,
           book: _book!,
           chapters: _chapters,
+          onChapterChanged: (index) {
+            if (_currentChapterIndex != index) {
+              setState(() => _currentChapterIndex = index);
+            }
+          },
         );
       case 'txt':
         return TxtReaderScreen(
           key: _txtKey,
           book: _book!,
           chapters: _chapters,
+          onChapterChanged: (index) {
+            if (_currentChapterIndex != index) {
+              setState(() => _currentChapterIndex = index);
+            }
+          },
         );
       case 'docx':
         return DocxReaderScreen(
           key: _docxKey,
           book: _book!,
           chapters: _chapters,
+          onChapterChanged: (index) {
+            if (_currentChapterIndex != index) {
+              setState(() => _currentChapterIndex = index);
+            }
+          },
         );
       case 'cbz':
       case 'cbr':
@@ -205,6 +224,11 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _mobiKey,
           book: _book!,
           chapters: _chapters,
+          onChapterChanged: (index) {
+            if (_currentChapterIndex != index) {
+              setState(() => _currentChapterIndex = index);
+            }
+          },
         );
       default:
         return Center(

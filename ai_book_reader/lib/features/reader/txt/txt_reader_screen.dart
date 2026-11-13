@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/local/book_repository.dart';
+import '../../../data/local/reading_position_service.dart';
 import '../../../data/models/book.dart';
 import '../../../data/models/chapter.dart';
 import '../shared/selection/selectable_annotated_text.dart';
@@ -36,11 +38,13 @@ enum TxtReaderTheme {
 class TxtReaderScreen extends ConsumerStatefulWidget {
   final Book book;
   final List<Chapter> chapters;
+  final ValueChanged<int>? onChapterChanged;
 
   const TxtReaderScreen({
     super.key,
     required this.book,
     required this.chapters,
+    this.onChapterChanged,
   });
 
   @override
@@ -48,8 +52,9 @@ class TxtReaderScreen extends ConsumerStatefulWidget {
 }
 
 class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   int _currentChapterIndex = 0;
+  Timer? _debounceTimer;
 
   double _fontSize = 16.0;
   TxtReaderTheme _readerTheme = TxtReaderTheme.light;
@@ -59,35 +64,123 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.chapters.isNotEmpty && widget.book.readingProgress > 0) {
-      _currentChapterIndex = (widget.book.readingProgress * widget.chapters.length)
-          .floor()
-          .clamp(0, widget.chapters.length - 1);
+    final positionService = ref.read(readingPositionServiceProvider);
+
+    if (widget.chapters.isNotEmpty) {
+      _currentChapterIndex = positionService.getLastChapterIndexSync(
+        widget.book.id,
+        fallbackProgress: widget.book.readingProgress,
+        totalChapters: widget.chapters.length,
+      );
     }
+
+    final initialOffset = positionService.getChapterScrollOffsetSync(
+      widget.book.id,
+      _currentChapterIndex,
+    );
+    _scrollController = ScrollController(initialScrollOffset: initialOffset);
+    _scrollController.addListener(_onScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreScrollPosition();
+    });
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _saveCurrentPosition();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), _saveCurrentPosition);
+  }
+
+  void _restoreScrollPosition() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final positionService = ref.read(readingPositionServiceProvider);
+    final savedOffset = positionService.getChapterScrollOffsetSync(
+      widget.book.id,
+      _currentChapterIndex,
+    );
+    final savedFraction = positionService.getChapterScrollFractionSync(
+      widget.book.id,
+      _currentChapterIndex,
+    );
+
+    void apply() {
+      if (!mounted || !_scrollController.hasClients) return;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      if (maxExtent <= 0 && savedOffset <= 0) return;
+
+      double target = savedOffset;
+      if (maxExtent > 0 && savedFraction > 0) {
+        target = (savedFraction * maxExtent).clamp(0.0, maxExtent);
+      } else if (maxExtent > 0) {
+        target = savedOffset.clamp(0.0, maxExtent);
+      }
+
+      if ((_scrollController.offset - target).abs() > 2.0) {
+        _scrollController.jumpTo(target);
+      }
+    }
+
+    apply();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      apply();
+    });
+  }
+
   void jumpToChapter(int index) {
     if (index < 0 || index >= widget.chapters.length) return;
+    _saveCurrentPosition();
+
     setState(() {
       _currentChapterIndex = index;
     });
+
+    widget.onChapterChanged?.call(index);
+
+    final positionService = ref.read(readingPositionServiceProvider);
+    final savedOffset = positionService.getChapterScrollOffsetSync(widget.book.id, index);
+
     if (_scrollController.hasClients) {
-      _scrollController.jumpTo(0);
+      _scrollController.jumpTo(savedOffset);
     }
-    _saveProgress();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreScrollPosition();
+    });
+
+    _saveCurrentPosition();
   }
 
-  void _saveProgress() {
-    if (widget.chapters.isNotEmpty) {
-      final progress = ((_currentChapterIndex + 1) / widget.chapters.length).clamp(0.0, 1.0);
-      ref.read(bookRepositoryProvider).updateReadingProgress(widget.book.id, progress);
-    }
+  void _saveCurrentPosition() {
+    if (!_scrollController.hasClients || widget.chapters.isEmpty) return;
+    final offset = _scrollController.offset;
+    final maxExtent = _scrollController.position.maxScrollExtent;
+    final positionService = ref.read(readingPositionServiceProvider);
+
+    positionService.savePositionSync(
+      bookId: widget.book.id,
+      chapterIndex: _currentChapterIndex,
+      scrollOffset: offset,
+      maxScrollExtent: maxExtent,
+      totalChapters: widget.chapters.length,
+    );
+
+    final progress = ReadingPositionService.calculateOverallProgress(
+      chapterIndex: _currentChapterIndex,
+      scrollOffset: offset,
+      maxScrollExtent: maxExtent,
+      totalChapters: widget.chapters.length,
+    );
+
+    ref.read(bookRepositoryProvider).updateReadingProgress(widget.book.id, progress);
   }
 
   void showSettingsModal() {

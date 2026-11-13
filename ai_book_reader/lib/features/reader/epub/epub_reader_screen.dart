@@ -7,11 +7,13 @@ import '../shared/html_chapter_view.dart';
 class EpubReaderScreen extends ConsumerStatefulWidget {
   final Book book;
   final List<Chapter> chapters;
+  final ValueChanged<int>? onChapterChanged;
 
   const EpubReaderScreen({
     super.key,
     required this.book,
     required this.chapters,
+    this.onChapterChanged,
   });
 
   @override
@@ -33,6 +35,7 @@ class EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
       key: _htmlViewKey,
       book: widget.book,
       chapters: widget.chapters,
+      onChapterChanged: widget.onChapterChanged,
       emptyMessage: 'EPUB book has no chapters.',
     );
   }
