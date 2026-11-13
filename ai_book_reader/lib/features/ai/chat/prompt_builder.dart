@@ -161,12 +161,14 @@ Return ONLY valid JSON with this shape:
 }
 Requirements: 8 to 16 cards covering key ideas, terms, and relationships.''';
       case StudioArtifactType.studyGuide:
-        return '''Task: Create a study guide in Markdown.
-Return ONLY valid JSON with this shape:
-{
-  "markdown": "# Study Guide\\n\\n## Briefing\\n...\\n## Key Ideas\\n...\\n## FAQ\\n...\\n## Glossary\\n..."
-}
-Include these sections: Briefing, Key Ideas, FAQ, Glossary.''';
+        return '''Task: Create a comprehensive study guide in Markdown.
+Provide the study guide directly in Markdown (do not wrap in JSON or code fences).
+Include these sections:
+# Study Guide
+## Briefing
+## Key Ideas
+## FAQ
+## Glossary''';
       case StudioArtifactType.slides:
         return '''Task: Create a slideshow outline.
 Return ONLY valid JSON with this shape:

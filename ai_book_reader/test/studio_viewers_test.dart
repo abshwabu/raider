@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_book_reader/features/studio/viewers/flashcards_viewer.dart';
 import 'package:ai_book_reader/features/studio/viewers/quiz_viewer.dart';
 import 'package:ai_book_reader/features/studio/viewers/slides_viewer.dart';
+import 'package:ai_book_reader/features/studio/viewers/study_guide_viewer.dart';
 
 void main() {
   testWidgets('QuizViewer shows question and advances after answer', (tester) async {
@@ -83,5 +84,19 @@ void main() {
     expect(find.text('Intro'), findsOneWidget);
     expect(find.text('Point one'), findsOneWidget);
     expect(find.textContaining('Say hello'), findsOneWidget);
+  });
+
+  testWidgets('StudyGuideViewer unwraps json and renders markdown body', (tester) async {
+    const payload = '{"markdown": "# Great Gatsby Guide\\n\\n## Briefing\\nImportant novel."}';
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: StudyGuideViewer(payloadJson: payload),
+      ),
+    );
+
+    expect(find.text('Study guide'), findsOneWidget);
+    expect(find.textContaining('Great Gatsby Guide'), findsOneWidget);
+    expect(find.textContaining('"markdown"'), findsNothing);
   });
 }

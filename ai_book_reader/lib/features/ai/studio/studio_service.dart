@@ -106,11 +106,14 @@ class StudioService {
       payload = _parseAndValidate(type, raw);
     } catch (_) {
       // One repair retry with stricter instructions.
+      final retryInstruction = type == StudioArtifactType.studyGuide
+          ? 'Your previous response was invalid. Return a comprehensive study guide formatted directly in Markdown with Briefing, Key Ideas, FAQ, and Glossary sections.'
+          : 'Your previous response was invalid. Return ONLY valid JSON matching the required schema, with no markdown fences or commentary.';
       raw = await _complete(
         systemPrompt: systemPrompt,
         userMessage: '''$userPrompt
 
-Your previous response was invalid. Return ONLY valid JSON matching the required schema, with no markdown fences or commentary.''',
+$retryInstruction''',
       );
       payload = _parseAndValidate(type, raw);
     }

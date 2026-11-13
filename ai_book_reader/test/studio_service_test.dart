@@ -156,6 +156,36 @@ void main() {
     expect(saved.length, 1);
   });
 
+  test('StudioService generates and persists study guide cleanly without raw json wrappers', () async {
+    final bookId = await seedBook();
+    final fake = _FakeAiProvider('''```json
+{
+  "markdown": "# Studio Guide\\n\\n## Briefing\\nCore theme is freedom."
+}
+```''');
+
+    final service = StudioService(
+      bookRepository: bookRepo,
+      chapterRepository: chapterRepo,
+      chunkRepository: chunkRepo,
+      artifactRepository: artifactRepo,
+      retrievalService: RetrievalService(chunkRepo, fake),
+      aiProvider: fake,
+    );
+
+    final artifact = await service.generate(
+      bookId: bookId,
+      type: StudioArtifactType.studyGuide,
+    );
+
+    expect(artifact.id, greaterThan(0));
+    expect(artifact.type, StudioArtifactType.studyGuide);
+    expect(artifact.title.contains('Study guide'), isTrue);
+    expect(artifact.payloadJson.contains('Core theme is freedom.'), isTrue);
+    expect(artifact.payloadJson.contains('```json'), isFalse);
+    expect(artifact.payloadJson.contains(r'\"markdown\": \"# Studio Guide'), isFalse);
+  });
+
   test('StudioService retries once when first response is invalid JSON', () async {
     final bookId = await seedBook();
     var call = 0;
