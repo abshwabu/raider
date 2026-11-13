@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/book_repository.dart';
 import '../../data/local/chapter_repository.dart';
@@ -20,6 +21,7 @@ import 'mobi/mobi_parser.dart';
 import 'mobi/mobi_reader_screen.dart';
 import 'pdf/pdf_parser.dart';
 import 'pdf/pdf_reader_screen.dart';
+import 'shared/ai_speed_dial_fab.dart';
 import 'shared/chapter_list_drawer.dart';
 import 'txt/txt_parser.dart';
 import 'txt/txt_reader_screen.dart';
@@ -49,6 +51,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
   List<Chapter> _chapters = [];
   bool _isLoading = true;
   int _currentChapterIndex = 0;
+  bool _showChrome = true;
 
   @override
   void initState() {
@@ -56,96 +59,148 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
     _loadBookAndChapters();
   }
 
-  Future<void> _loadBookAndChapters() async {
-    final parsedId = int.tryParse(widget.bookId);
-    if (parsedId == null) {
-      setState(() => _isLoading = false);
-      return;
+  void _toggleChrome() {
+    setState(() {
+      _showChrome = !_showChrome;
+    });
+  }
+
+  void _hideChrome() {
+    if (_showChrome) {
+      setState(() {
+        _showChrome = false;
+      });
     }
+  }
 
-    final bookRepo = ref.read(bookRepositoryProvider);
-    final chapterRepo = ref.read(chapterRepositoryProvider);
+  void _openStudio() {
+    final chapter = _chapters.isNotEmpty &&
+            _currentChapterIndex >= 0 &&
+            _currentChapterIndex < _chapters.length
+        ? _chapters[_currentChapterIndex]
+        : null;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StudioHubScreen(
+        bookId: _book!.id,
+        bookTitle: _book!.title,
+        currentChapterId: chapter?.id,
+        currentChapterTitle: chapter?.title,
+      ),
+    );
+  }
 
-    final book = await bookRepo.getBook(parsedId);
-    if (book != null) {
-      var chapters = await chapterRepo.getChaptersForBook(book.id);
+  void _openAiChat() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AiChatScreen(
+        bookId: _book!.id,
+        bookTitle: _book!.title,
+      ),
+    );
+  }
 
-      // Fallback extraction if chapters or comic page paths don't exist yet
-      final format = book.format.toLowerCase();
-      if (format == 'cbz' || format == 'cbr') {
-        bool needsExtraction = book.pageImagePaths.isEmpty;
-        if (!needsExtraction) {
-          for (final path in book.pageImagePaths) {
-            if (!File(path).existsSync()) {
-              needsExtraction = true;
-              break;
+  Future<void> _loadBookAndChapters() async {
+    try {
+      final parsedId = int.tryParse(widget.bookId);
+      if (parsedId == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final bookRepo = ref.read(bookRepositoryProvider);
+      final chapterRepo = ref.read(chapterRepositoryProvider);
+
+      final book = await bookRepo.getBook(parsedId);
+      if (book != null) {
+        var chapters = await chapterRepo.getChaptersForBook(book.id);
+
+        // Fallback extraction if chapters or comic page paths don't exist yet
+        final format = book.format.toLowerCase();
+        if (format == 'cbz' || format == 'cbr') {
+          bool needsExtraction = book.pageImagePaths.isEmpty;
+          if (!needsExtraction) {
+            for (final path in book.pageImagePaths) {
+              if (!File(path).existsSync()) {
+                needsExtraction = true;
+                break;
+              }
             }
           }
+          if (needsExtraction) {
+            final extracted = await ComicParser.extractPageImagePaths(
+              book: book,
+              bookRepository: bookRepo,
+            );
+            book.pageImagePaths = extracted;
+          }
+        } else if (chapters.isEmpty) {
+          if (format == 'pdf') {
+            chapters = await PdfParser.extractChapters(
+              bookId: book.id,
+              filePath: book.filePath,
+              chapterRepository: chapterRepo,
+            );
+          } else if (format == 'epub') {
+            chapters = await EpubParser.extractChapters(
+              bookId: book.id,
+              filePath: book.filePath,
+              chapterRepository: chapterRepo,
+              bookRepository: bookRepo,
+            );
+          } else if (format == 'txt') {
+            chapters = await TxtParser.extractChapters(
+              bookId: book.id,
+              filePath: book.filePath,
+              chapterRepository: chapterRepo,
+            );
+          } else if (format == 'docx') {
+            chapters = await DocxParser.extractChapters(
+              bookId: book.id,
+              filePath: book.filePath,
+              chapterRepository: chapterRepo,
+            );
+          } else if (format == 'mobi' || format == 'azw3') {
+            chapters = await MobiParser.extractChapters(
+              bookId: book.id,
+              filePath: book.filePath,
+              chapterRepository: chapterRepo,
+            );
+          }
         }
-        if (needsExtraction) {
-          final extracted = await ComicParser.extractPageImagePaths(
-            book: book,
-            bookRepository: bookRepo,
-          );
-          book.pageImagePaths = extracted;
+
+        if (format != 'cbz' && format != 'cbr') {
+          unawaited(ref.read(chunkingServiceProvider).chunkBook(book.id));
         }
-      } else if (chapters.isEmpty) {
-        if (format == 'pdf') {
-          chapters = await PdfParser.extractChapters(
-            bookId: book.id,
-            filePath: book.filePath,
-            chapterRepository: chapterRepo,
-          );
-        } else if (format == 'epub') {
-          chapters = await EpubParser.extractChapters(
-            bookId: book.id,
-            filePath: book.filePath,
-            chapterRepository: chapterRepo,
-            bookRepository: bookRepo,
-          );
-        } else if (format == 'txt') {
-          chapters = await TxtParser.extractChapters(
-            bookId: book.id,
-            filePath: book.filePath,
-            chapterRepository: chapterRepo,
-          );
-        } else if (format == 'docx') {
-          chapters = await DocxParser.extractChapters(
-            bookId: book.id,
-            filePath: book.filePath,
-            chapterRepository: chapterRepo,
-          );
-        } else if (format == 'mobi' || format == 'azw3') {
-          chapters = await MobiParser.extractChapters(
-            bookId: book.id,
-            filePath: book.filePath,
-            chapterRepository: chapterRepo,
+
+        int initialChapterIndex = 0;
+        if (chapters.isNotEmpty) {
+          final positionService = ref.read(readingPositionServiceProvider);
+          initialChapterIndex = positionService.getLastChapterIndexSync(
+            book.id,
+            fallbackProgress: book.readingProgress,
+            totalChapters: chapters.length,
           );
         }
-      }
 
-      if (format != 'cbz' && format != 'cbr') {
-        unawaited(ref.read(chunkingServiceProvider).chunkBook(book.id));
+        if (mounted) {
+          setState(() {
+            _book = book;
+            _chapters = chapters;
+            _currentChapterIndex = initialChapterIndex;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
-
-      int initialChapterIndex = 0;
-      if (chapters.isNotEmpty) {
-        final positionService = ref.read(readingPositionServiceProvider);
-        initialChapterIndex = positionService.getLastChapterIndexSync(
-          book.id,
-          fallbackProgress: book.readingProgress,
-          totalChapters: chapters.length,
-        );
-      }
-
-      setState(() {
-        _book = book;
-        _chapters = chapters;
-        _currentChapterIndex = initialChapterIndex;
-        _isLoading = false;
-      });
-    } else {
-      setState(() => _isLoading = false);
+    } catch (e, st) {
+      debugPrint('Error loading book: $e\n$st');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -183,6 +238,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _epubKey,
           book: _book!,
           chapters: _chapters,
+          showControls: _showChrome,
+          onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
               setState(() => _currentChapterIndex = index);
@@ -194,6 +251,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _txtKey,
           book: _book!,
           chapters: _chapters,
+          showControls: _showChrome,
+          onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
               setState(() => _currentChapterIndex = index);
@@ -205,6 +264,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _docxKey,
           book: _book!,
           chapters: _chapters,
+          showControls: _showChrome,
+          onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
               setState(() => _currentChapterIndex = index);
@@ -224,6 +285,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           key: _mobiKey,
           book: _book!,
           chapters: _chapters,
+          showControls: _showChrome,
+          onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
               setState(() => _currentChapterIndex = index);
@@ -270,19 +333,31 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
 
     return Scaffold(
       key: _scaffoldKey,
-      appBar: AppBar(
-        title: Text(_book!.title),
-        actions: isComic
-            ? null
-            : [
-                IconButton(
-                  icon: const Icon(Icons.format_list_bulleted_rounded),
-                  tooltip: 'Table of Contents',
-                  onPressed: () {
-                    _scaffoldKey.currentState?.openEndDrawer();
-                  },
-                ),
-              ],
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(_showChrome ? kToolbarHeight : 0),
+        child: AnimatedSlide(
+          offset: _showChrome ? Offset.zero : const Offset(0, -1),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: AnimatedOpacity(
+            opacity: _showChrome ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            child: AppBar(
+              title: Text(_book!.title),
+              actions: isComic
+                  ? null
+                  : [
+                      IconButton(
+                        icon: const Icon(Icons.format_list_bulleted_rounded),
+                        tooltip: 'Table of Contents',
+                        onPressed: () {
+                          _scaffoldKey.currentState?.openEndDrawer();
+                        },
+                      ),
+                    ],
+            ),
+          ),
+        ),
       ),
       endDrawer: isComic
           ? null
@@ -294,53 +369,32 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
             ),
       floatingActionButton: isComic
           ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'studio_fab',
-                  onPressed: () {
-                    final chapter = _chapters.isNotEmpty &&
-                            _currentChapterIndex >= 0 &&
-                            _currentChapterIndex < _chapters.length
-                        ? _chapters[_currentChapterIndex]
-                        : null;
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => StudioHubScreen(
-                        bookId: _book!.id,
-                        bookTitle: _book!.title,
-                        currentChapterId: chapter?.id,
-                        currentChapterTitle: chapter?.title,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.auto_stories_outlined),
-                  label: const Text('Studio'),
+          : AnimatedSlide(
+              offset: _showChrome ? Offset.zero : const Offset(0, 2),
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: AnimatedOpacity(
+                opacity: _showChrome ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 58),
+                  child: AiSpeedDialFab(
+                    isVisible: _showChrome,
+                    onOpenStudio: _openStudio,
+                    onOpenChat: _openAiChat,
+                  ),
                 ),
-                const SizedBox(height: 12),
-                FloatingActionButton.extended(
-                  heroTag: 'ask_ai_fab',
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => AiChatScreen(
-                        bookId: _book!.id,
-                        bookTitle: _book!.title,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.auto_awesome_rounded),
-                  label: const Text('Ask AI'),
-                ),
-              ],
+              ),
             ),
-      body: _buildFormatBody(),
+      body: NotificationListener<UserScrollNotification>(
+        onNotification: (notification) {
+          if (notification.direction != ScrollDirection.idle) {
+            _hideChrome();
+          }
+          return false;
+        },
+        child: _buildFormatBody(),
+      ),
     );
   }
 }

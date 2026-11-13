@@ -13,6 +13,8 @@ class HtmlChapterView extends ConsumerStatefulWidget {
   final List<Chapter> chapters;
   final String emptyMessage;
   final ValueChanged<int>? onChapterChanged;
+  final bool showControls;
+  final VoidCallback? onTapBody;
 
   const HtmlChapterView({
     super.key,
@@ -20,6 +22,8 @@ class HtmlChapterView extends ConsumerStatefulWidget {
     required this.chapters,
     this.emptyMessage = 'Book has no chapters.',
     this.onChapterChanged,
+    this.showControls = true,
+    this.onTapBody,
   });
 
   @override
@@ -186,74 +190,90 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     return Column(
       children: [
         Expanded(
-          child: SingleChildScrollView(
-            key: PageStorageKey('html_chapter_${widget.book.id}_$_currentChapterIndex'),
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  currentChapter.title,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const Divider(height: 24),
-                SelectableAnnotatedText(
-                  bookId: widget.book.id,
-                  bookTitle: widget.book.title,
-                  chapterId: currentChapter.id,
-                  text: plainText,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                        height: 1.6,
-                      ) ??
-                      const TextStyle(fontSize: 16, height: 1.6),
-                ),
-              ],
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: widget.onTapBody,
+            child: SingleChildScrollView(
+              key: PageStorageKey('html_chapter_${widget.book.id}_$_currentChapterIndex'),
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    currentChapter.title,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const Divider(height: 24),
+                  SelectableAnnotatedText(
+                    bookId: widget.book.id,
+                    bookTitle: widget.book.title,
+                    chapterId: currentChapter.id,
+                    text: plainText,
+                    onTap: widget.onTapBody,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                          height: 1.6,
+                        ) ??
+                        const TextStyle(fontSize: 16, height: 1.6),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        // In-chapter reading progress bar
-        LinearProgressIndicator(
-          value: _inChapterProgress.clamp(0.0, 1.0),
-          minHeight: 2.5,
-          backgroundColor: theme.colorScheme.surfaceContainerHighest,
-          valueColor: AlwaysStoppedAnimation<Color>(
-            theme.colorScheme.primary.withAlpha(200),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: theme.colorScheme.surfaceContainerHighest,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left_rounded),
-                tooltip: 'Previous Chapter',
-                onPressed: _currentChapterIndex > 0
-                    ? () => jumpToChapter(_currentChapterIndex - 1)
-                    : null,
-              ),
-              Expanded(
-                child: Text(
-                  'Chapter ${_currentChapterIndex + 1} of ${widget.chapters.length} · ${(_inChapterProgress * 100).round()}%',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right_rounded),
-                tooltip: 'Next Chapter',
-                onPressed: _currentChapterIndex < widget.chapters.length - 1
-                    ? () => jumpToChapter(_currentChapterIndex + 1)
-                    : null,
-              ),
-            ],
-          ),
+        // In-chapter reading progress and navigation controls (collapsible during reading)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: widget.showControls
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LinearProgressIndicator(
+                      value: _inChapterProgress.clamp(0.0, 1.0),
+                      minHeight: 2.5,
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary.withAlpha(200),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left_rounded),
+                            tooltip: 'Previous Chapter',
+                            onPressed: _currentChapterIndex > 0
+                                ? () => jumpToChapter(_currentChapterIndex - 1)
+                                : null,
+                          ),
+                          Expanded(
+                            child: Text(
+                              'Chapter ${_currentChapterIndex + 1} of ${widget.chapters.length} · ${(_inChapterProgress * 100).round()}%',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right_rounded),
+                            tooltip: 'Next Chapter',
+                            onPressed: _currentChapterIndex < widget.chapters.length - 1
+                                ? () => jumpToChapter(_currentChapterIndex + 1)
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );

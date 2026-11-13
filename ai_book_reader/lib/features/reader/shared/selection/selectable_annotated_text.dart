@@ -15,6 +15,7 @@ class SelectableAnnotatedText extends ConsumerStatefulWidget {
   final int chapterId;
   final String text;
   final TextStyle style;
+  final VoidCallback? onTap;
 
   const SelectableAnnotatedText({
     super.key,
@@ -23,6 +24,7 @@ class SelectableAnnotatedText extends ConsumerStatefulWidget {
     required this.chapterId,
     required this.text,
     required this.style,
+    this.onTap,
   });
 
   @override
@@ -105,6 +107,7 @@ class _SelectableAnnotatedTextState
     // Always attach the custom menu (even while annotations are loading).
     return SelectableText.rich(
       span,
+      onTap: widget.onTap,
       contextMenuBuilder: (context, editableTextState) {
         return buildSelectionActionToolbar(
           context: context,

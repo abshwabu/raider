@@ -39,12 +39,16 @@ class TxtReaderScreen extends ConsumerStatefulWidget {
   final Book book;
   final List<Chapter> chapters;
   final ValueChanged<int>? onChapterChanged;
+  final bool showControls;
+  final VoidCallback? onTapBody;
 
   const TxtReaderScreen({
     super.key,
     required this.book,
     required this.chapters,
     this.onChapterChanged,
+    this.showControls = true,
+    this.onTapBody,
   });
 
   @override
@@ -276,88 +280,99 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
       child: Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          currentChapter.title,
-                          style: TextStyle(
-                            fontSize: _fontSize * 1.3,
-                            fontWeight: FontWeight.bold,
-                            color: _readerTheme.textColor,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: widget.onTapBody,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            currentChapter.title,
+                            style: TextStyle(
+                              fontSize: _fontSize * 1.3,
+                              fontWeight: FontWeight.bold,
+                              color: _readerTheme.textColor,
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.text_fields_rounded,
-                          color: _readerTheme.textColor,
+                        IconButton(
+                          icon: Icon(
+                            Icons.text_fields_rounded,
+                            color: _readerTheme.textColor,
+                          ),
+                          tooltip: 'Font & Theme Settings',
+                          onPressed: showSettingsModal,
                         ),
-                        tooltip: 'Font & Theme Settings',
-                        onPressed: showSettingsModal,
-                      ),
-                    ],
-                  ),
-                  Divider(
-                    height: 24,
-                    color: _readerTheme.textColor.withValues(alpha: 0.3),
-                  ),
-                  SelectableAnnotatedText(
-                    bookId: widget.book.id,
-                    bookTitle: widget.book.title,
-                    chapterId: currentChapter.id,
-                    text: currentChapter.content,
-                    style: TextStyle(
-                      fontSize: _fontSize,
-                      height: 1.6,
-                      color: _readerTheme.textColor,
+                      ],
                     ),
-                  ),
-                ],
+                    Divider(
+                      height: 24,
+                      color: _readerTheme.textColor.withValues(alpha: 0.3),
+                    ),
+                    SelectableAnnotatedText(
+                      bookId: widget.book.id,
+                      bookTitle: widget.book.title,
+                      chapterId: currentChapter.id,
+                      text: currentChapter.content,
+                      onTap: widget.onTapBody,
+                      style: TextStyle(
+                        fontSize: _fontSize,
+                        height: 1.6,
+                        color: _readerTheme.textColor,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: _readerTheme.backgroundColor == Colors.white
-                ? Theme.of(context).colorScheme.surfaceContainerHighest
-                : _readerTheme.textColor.withValues(alpha: 0.1),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    Icons.chevron_left_rounded,
-                    color: _readerTheme.textColor,
-                  ),
-                  tooltip: 'Previous Section',
-                  onPressed: _currentChapterIndex > 0
-                      ? () => jumpToChapter(_currentChapterIndex - 1)
-                      : null,
-                ),
-                Text(
-                  'Section ${_currentChapterIndex + 1} of ${widget.chapters.length}',
-                  style: TextStyle(color: _readerTheme.textColor),
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.chevron_right_rounded,
-                    color: _readerTheme.textColor,
-                  ),
-                  tooltip: 'Next Section',
-                  onPressed: _currentChapterIndex < widget.chapters.length - 1
-                      ? () => jumpToChapter(_currentChapterIndex + 1)
-                      : null,
-                ),
-              ],
-            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            child: widget.showControls
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: _readerTheme.backgroundColor == Colors.white
+                        ? Theme.of(context).colorScheme.surfaceContainerHighest
+                        : _readerTheme.textColor.withValues(alpha: 0.1),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.chevron_left_rounded,
+                            color: _readerTheme.textColor,
+                          ),
+                          tooltip: 'Previous Section',
+                          onPressed: _currentChapterIndex > 0
+                              ? () => jumpToChapter(_currentChapterIndex - 1)
+                              : null,
+                        ),
+                        Text(
+                          'Section ${_currentChapterIndex + 1} of ${widget.chapters.length}',
+                          style: TextStyle(color: _readerTheme.textColor),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.chevron_right_rounded,
+                            color: _readerTheme.textColor,
+                          ),
+                          tooltip: 'Next Section',
+                          onPressed: _currentChapterIndex < widget.chapters.length - 1
+                              ? () => jumpToChapter(_currentChapterIndex + 1)
+                              : null,
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),

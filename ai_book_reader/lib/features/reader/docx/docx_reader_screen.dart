@@ -8,12 +8,16 @@ class DocxReaderScreen extends ConsumerStatefulWidget {
   final Book book;
   final List<Chapter> chapters;
   final ValueChanged<int>? onChapterChanged;
+  final bool showControls;
+  final VoidCallback? onTapBody;
 
   const DocxReaderScreen({
     super.key,
     required this.book,
     required this.chapters,
     this.onChapterChanged,
+    this.showControls = true,
+    this.onTapBody,
   });
 
   @override
@@ -36,6 +40,8 @@ class DocxReaderScreenState extends ConsumerState<DocxReaderScreen> {
       book: widget.book,
       chapters: widget.chapters,
       onChapterChanged: widget.onChapterChanged,
+      showControls: widget.showControls,
+      onTapBody: widget.onTapBody,
       emptyMessage: 'DOCX book has no chapters.',
     );
   }
