@@ -1,59 +1,46 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
 import 'package:ai_book_reader/data/models/book.dart';
-import 'package:ai_book_reader/data/models/chapter.dart';
-import 'package:ai_book_reader/data/local/isar_service.dart';
 import 'package:ai_book_reader/data/local/book_repository.dart';
 import 'package:ai_book_reader/features/library/presentation/screens/library_screen.dart';
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-class FakePathProviderPlatform extends PathProviderPlatform
-    with MockPlatformInterfaceMixin {
-  final String path;
-  FakePathProviderPlatform(this.path);
+class FakeBookRepository extends Fake implements BookRepository {
+  final Map<int, Book> books = {};
+  final List<int> deletedIds = [];
 
   @override
-  Future<String?> getApplicationDocumentsPath() async => path;
+  Future<Book?> getBook(int id) async => books[id];
+
+  @override
+  Future<int> addBook(Book book) async {
+    final id = book.id > 0 ? book.id : books.length + 1;
+    book.id = id;
+    books[id] = book;
+    return id;
+  }
+
+  @override
+  Future<void> deleteBook(int id) async {
+    deletedIds.add(id);
+    books.remove(id);
+  }
 }
 
 void main() {
-  late Isar isar;
-  late BookRepository bookRepo;
-  late Directory tempDir;
+  late FakeBookRepository fakeBookRepo;
 
-  setUpAll(() async {
-    await Isar.initializeIsarCore(download: true);
-  });
-
-  setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('library_screen_test');
-    final docsDir = Directory('${tempDir.path}/documents');
-    await docsDir.create(recursive: true);
-    PathProviderPlatform.instance = FakePathProviderPlatform(docsDir.path);
-
-    isar = await Isar.open(
-      [BookSchema, ChapterSchema],
-      directory: tempDir.path,
-    );
-    bookRepo = BookRepository(isar);
-  });
-
-  tearDown(() async {
-    await isar.close(deleteFromDisk: true);
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
+  setUp(() {
+    fakeBookRepo = FakeBookRepository();
   });
 
   testWidgets('LibraryScreen renders empty state when no books exist', (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isarProvider.overrideWithValue(isar),
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => Stream.value(<Book>[])),
         ],
         child: const MaterialApp(
           home: LibraryScreen(),
@@ -62,7 +49,7 @@ void main() {
     );
 
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
 
     expect(find.text('My Library'), findsOneWidget);
     expect(find.text('No books yet'), findsOneWidget);
@@ -75,28 +62,31 @@ void main() {
 
   testWidgets('LibraryScreen displays book cards when books exist', (WidgetTester tester) async {
     final book1 = Book()
+      ..id = 1
       ..title = 'Alpha PDF'
       ..author = 'Author Alpha'
       ..format = 'pdf'
-      ..filePath = '${tempDir.path}/alpha.pdf'
+      ..filePath = '/fake/alpha.pdf'
       ..addedAt = DateTime.now()
       ..readingProgress = 0.45;
 
     final book2 = Book()
+      ..id = 2
       ..title = 'Beta EPUB'
       ..author = 'Author Beta'
       ..format = 'epub'
-      ..filePath = '${tempDir.path}/beta.epub'
+      ..filePath = '/fake/beta.epub'
       ..addedAt = DateTime.now().add(const Duration(minutes: 1))
       ..readingProgress = 0.0;
 
-    await bookRepo.addBook(book1);
-    await bookRepo.addBook(book2);
+    await fakeBookRepo.addBook(book1);
+    await fakeBookRepo.addBook(book2);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isarProvider.overrideWithValue(isar),
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => Stream.value([book1, book2])),
         ],
         child: const MaterialApp(
           home: LibraryScreen(),
@@ -105,14 +95,15 @@ void main() {
     );
 
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
 
-    expect(find.text('Alpha PDF'), findsOneWidget);
+    // Verify title appears on cover and card
+    expect(find.text('Alpha PDF'), findsWidgets);
     expect(find.text('Author Alpha'), findsOneWidget);
     expect(find.text('45%'), findsOneWidget);
     expect(find.text('PDF'), findsOneWidget);
 
-    expect(find.text('Beta EPUB'), findsOneWidget);
+    expect(find.text('Beta EPUB'), findsWidgets);
     expect(find.text('Author Beta'), findsOneWidget);
     expect(find.text('Unread'), findsOneWidget);
     expect(find.text('EPUB'), findsOneWidget);
@@ -120,18 +111,23 @@ void main() {
 
   testWidgets('Deleting a book removes it from grid after confirmation', (WidgetTester tester) async {
     final book = Book()
+      ..id = 1
       ..title = 'Book To Delete'
       ..format = 'txt'
-      ..filePath = '${tempDir.path}/delete_me.txt'
+      ..filePath = '/fake/delete_me.txt'
       ..addedAt = DateTime.now();
 
-    final id = await bookRepo.addBook(book);
-    book.id = id;
+    await fakeBookRepo.addBook(book);
+
+    final controller = StreamController<List<Book>>();
+    controller.add([book]);
+    addTearDown(controller.close);
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isarProvider.overrideWithValue(isar),
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => controller.stream),
         ],
         child: const MaterialApp(
           home: LibraryScreen(),
@@ -140,18 +136,16 @@ void main() {
     );
 
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Book To Delete'), findsOneWidget);
+    await tester.pump();
+    expect(find.text('Book To Delete'), findsWidgets);
 
     // Open overflow menu for the book
     await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
 
     // Tap Delete option
     await tester.tap(find.text('Delete'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
 
     // Confirm dialog appears
     expect(find.text('Delete Book'), findsOneWidget);
@@ -159,12 +153,16 @@ void main() {
 
     // Tap Delete in dialog
     await tester.tap(find.widgetWithText(ElevatedButton, 'Delete'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
 
-    // Verify book is removed from Isar & grid
+    // Simulate stream updating after deletion
+    controller.add([]);
+    await tester.pump();
+    await tester.pump();
+
+    // Verify book is removed from grid and deleted from repository
     expect(find.text('Book To Delete'), findsNothing);
-    final savedBook = await bookRepo.getBook(id);
-    expect(savedBook, isNull);
+    expect(fakeBookRepo.deletedIds, contains(1));
+    expect(await fakeBookRepo.getBook(1), isNull);
   });
 }

@@ -1,56 +1,37 @@
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
 import 'package:ai_book_reader/app.dart';
-import 'package:ai_book_reader/data/local/isar_service.dart';
+import 'package:ai_book_reader/data/local/book_repository.dart';
 import 'package:ai_book_reader/data/models/book.dart';
-import 'package:ai_book_reader/data/models/chapter.dart';
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-class FakePathProviderPlatform extends PathProviderPlatform
-    with MockPlatformInterfaceMixin {
-  final String path;
-  FakePathProviderPlatform(this.path);
+class FakeBookRepository extends Fake implements BookRepository {
+  final Map<int, Book> books = {};
 
   @override
-  Future<String?> getApplicationDocumentsPath() async => path;
+  Future<Book?> getBook(int id) async => books[id];
+
+  @override
+  Future<List<Book>> getAllBooks() async => books.values.toList();
+
+  @override
+  Stream<List<Book>> watchAllBooks() => Stream.value(books.values.toList());
 }
 
 void main() {
-  late Isar isar;
-  late Directory tempDir;
+  late FakeBookRepository fakeBookRepo;
 
-  setUpAll(() async {
-    await Isar.initializeIsarCore(download: true);
-  });
-
-  setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('widget_test');
-    final docsDir = Directory('${tempDir.path}/documents');
-    await docsDir.create(recursive: true);
-    PathProviderPlatform.instance = FakePathProviderPlatform(docsDir.path);
-
-    isar = await Isar.open(
-      [BookSchema, ChapterSchema],
-      directory: tempDir.path,
-    );
-  });
-
-  tearDown(() async {
-    await isar.close(deleteFromDisk: true);
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
+  setUp(() {
+    fakeBookRepo = FakeBookRepository();
   });
 
   testWidgets('App loads LibraryScreen empty state smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isarProvider.overrideWithValue(isar),
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => Stream.value(<Book>[])),
         ],
         child: const App(),
       ),
@@ -65,7 +46,8 @@ void main() {
 
     // Pump past the splash duration to transition to LibraryScreen
     await tester.pump(const Duration(milliseconds: 1400));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Verify that the Library title and empty state text appear
     expect(find.text('My Library'), findsOneWidget);

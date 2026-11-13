@@ -33,6 +33,12 @@ void main() {
     }
   });
 
+  test('watchAllBooks on empty database emits empty list', () async {
+    final stream = bookRepo.watchAllBooks();
+    final first = await stream.first.timeout(const Duration(seconds: 2));
+    expect(first, isEmpty);
+  });
+
   test('Book and Chapter repository CRUD operations test', () async {
     final book = Book()
       ..title = 'Test Book'

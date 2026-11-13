@@ -59,16 +59,16 @@ class BookRepository {
     final book = await isar.books.get(id);
     if (book != null) {
       final file = File(book.filePath);
-      if (await file.exists()) {
+      if (file.existsSync()) {
         try {
-          await file.delete();
+          file.deleteSync();
         } catch (_) {}
       }
       if (book.coverImagePath != null) {
         final coverFile = File(book.coverImagePath!);
-        if (await coverFile.exists()) {
+        if (coverFile.existsSync()) {
           try {
-            await coverFile.delete();
+            coverFile.deleteSync();
           } catch (_) {}
         }
       }
