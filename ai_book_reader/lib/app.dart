@@ -9,6 +9,7 @@ import 'features/splash/presentation/screens/splash_screen.dart';
 
 final _router = GoRouter(
   initialLocation: '/splash',
+  errorBuilder: (context, state) => const LibraryScreen(),
   routes: [
     GoRoute(
       path: '/splash',

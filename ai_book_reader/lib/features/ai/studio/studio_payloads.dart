@@ -156,18 +156,99 @@ class MindMapPayload {
   }
 }
 
+enum CustomStudyGuideFormat {
+  executiveBrief(
+    id: 'executive_brief',
+    label: 'Executive Brief & Deep Dive',
+    subtitle: 'Core thesis, detailed analysis, FAQ & glossary',
+  ),
+  cornellNotes(
+    id: 'cornell_notes',
+    label: 'Cornell Notes & Active Recall',
+    subtitle: 'Cue column questions, main notes & self-test',
+  ),
+  actionPlaybook(
+    id: 'action_playbook',
+    label: 'Actionable Playbook & Checklist',
+    subtitle: 'Implementation steps, pitfall warnings & checklist',
+  ),
+  thematicAnalysis(
+    id: 'thematic_analysis',
+    label: 'Thematic & Critical Analysis',
+    subtitle: 'Deep themes, philosophical context & debate',
+  ),
+  quickCheatSheet(
+    id: 'quick_cheat_sheet',
+    label: 'Rapid Cheat Sheet / One-Pager',
+    subtitle: 'TL;DR, key formulas, golden quotes & quick review',
+  ),
+  bookSummary(
+    id: 'book_summary',
+    label: 'Comprehensive Book Summary',
+    subtitle: 'High-level synthesis, narrative arc & core takeaways',
+  );
+
+  final String id;
+  final String label;
+  final String subtitle;
+
+  const CustomStudyGuideFormat({
+    required this.id,
+    required this.label,
+    required this.subtitle,
+  });
+
+  static CustomStudyGuideFormat fromId(String? id) {
+    return CustomStudyGuideFormat.values.firstWhere(
+      (f) => f.id == id,
+      orElse: () => CustomStudyGuideFormat.executiveBrief,
+    );
+  }
+}
+
 class StudyGuidePayload {
   final String markdown;
+  final CustomStudyGuideFormat format;
 
-  const StudyGuidePayload({required this.markdown});
+  const StudyGuidePayload({
+    required this.markdown,
+    this.format = CustomStudyGuideFormat.executiveBrief,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'markdown': markdown,
+    'format': format.id,
+  };
 
   factory StudyGuidePayload.fromJson(Map<String, dynamic> json) {
     final raw = (json['markdown'] ?? '').toString();
-    return StudyGuidePayload(markdown: cleanMarkdown(raw));
+    final formatId = json['format']?.toString();
+    return StudyGuidePayload(
+      markdown: cleanMarkdown(raw),
+      format: CustomStudyGuideFormat.fromId(formatId),
+    );
   }
 
-  factory StudyGuidePayload.fromRaw(String raw) {
-    return StudyGuidePayload(markdown: cleanMarkdown(raw));
+  factory StudyGuidePayload.fromRaw(
+    String raw, [
+    CustomStudyGuideFormat format = CustomStudyGuideFormat.executiveBrief,
+  ]) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final parsedFormat = decoded['format'] != null
+            ? CustomStudyGuideFormat.fromId(decoded['format'].toString())
+            : format;
+        return StudyGuidePayload(
+          markdown: cleanMarkdown((decoded['markdown'] ?? raw).toString()),
+          format: parsedFormat,
+        );
+      }
+    } catch (_) {}
+    return StudyGuidePayload(
+      markdown: cleanMarkdown(raw),
+      format: format,
+    );
   }
 
   /// Cleans and extracts the actual Markdown study guide from various possible formats:

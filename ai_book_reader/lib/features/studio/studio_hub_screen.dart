@@ -6,8 +6,10 @@ import '../../data/local/studio_artifact_repository.dart';
 import '../../data/models/studio_artifact.dart';
 import '../ai/embedding/embedding_service.dart';
 import '../ai/provider/ai_provider.dart';
+import '../ai/studio/studio_payloads.dart';
 import '../ai/studio/studio_service.dart';
 import 'studio_navigation.dart';
+import 'widgets/study_guide_format_sheet.dart';
 
 class StudioHubScreen extends ConsumerStatefulWidget {
   final int bookId;
@@ -32,6 +34,7 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
   bool _isPreparing = false;
   bool _isGenerating = false;
   StudioArtifactType? _generatingType;
+  CustomStudyGuideFormat? _generatingFormat;
   String? _statusMessage;
   String? _errorMessage;
   int _embeddingCurrent = 0;
@@ -94,21 +97,44 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
     }
   }
 
-  Future<void> _generate(StudioArtifactType type) async {
+  Future<void> _generate(
+    StudioArtifactType type, {
+    CustomStudyGuideFormat? studyGuideFormat,
+  }) async {
     if (_isGenerating || _isPreparing) return;
 
     final settings = ref.read(aiSettingsServiceProvider);
     final key = await settings.getByokKey();
+    if (!mounted) return;
     if (key == null || key.trim().isEmpty) {
       setState(() => _errorMessage = 'Gemini API key required');
       return;
     }
 
+    CustomStudyGuideFormat formatToUse =
+        studyGuideFormat ?? CustomStudyGuideFormat.executiveBrief;
+    if (type == StudioArtifactType.studyGuide && studyGuideFormat == null) {
+      final chosen = await StudyGuideFormatSheet.show(context);
+      if (!mounted) return;
+      if (chosen == null) return;
+      formatToUse = chosen;
+    }
+
+    final String label;
+    if (type == StudioArtifactType.studyGuide) {
+      label = formatToUse == CustomStudyGuideFormat.bookSummary
+          ? (_useChapterScope ? 'chapter summary' : 'book summary')
+          : formatToUse.label.toLowerCase();
+    } else {
+      label = studioTypeLabel(type).toLowerCase();
+    }
+
     setState(() {
       _isGenerating = true;
       _generatingType = type;
+      _generatingFormat = formatToUse;
       _errorMessage = null;
-      _statusMessage = 'Generating ${studioTypeLabel(type).toLowerCase()}...';
+      _statusMessage = 'Generating $label...';
     });
 
     try {
@@ -117,11 +143,13 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
             bookId: widget.bookId,
             type: type,
             chapterId: chapterId,
+            studyGuideFormat: formatToUse,
           );
       if (!mounted) return;
       setState(() {
         _isGenerating = false;
         _generatingType = null;
+        _generatingFormat = null;
         _statusMessage = null;
       });
       openStudioArtifact(context, artifact);
@@ -130,6 +158,7 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
       setState(() {
         _isGenerating = false;
         _generatingType = null;
+        _generatingFormat = null;
         _statusMessage = null;
         _errorMessage = e is NoApiKeyException
             ? 'Gemini API key required'
@@ -321,22 +350,49 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: StudioArtifactType.values.map((type) {
-                        final busy = _isGenerating && _generatingType == type;
-                        return ActionChip(
-                          avatar: busy
+                      children: [
+                        ...StudioArtifactType.values.map((type) {
+                          final busy = _isGenerating &&
+                              _generatingType == type &&
+                              _generatingFormat != CustomStudyGuideFormat.bookSummary;
+                          return ActionChip(
+                            avatar: busy
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : Icon(studioTypeIcon(type), size: 18),
+                            label: Text(studioTypeLabel(type)),
+                            onPressed: (_isGenerating || _isPreparing)
+                                ? null
+                                : () => _generate(type),
+                          );
+                        }),
+                        ActionChip(
+                          avatar: (_isGenerating &&
+                                  _generatingFormat ==
+                                      CustomStudyGuideFormat.bookSummary)
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
-                              : Icon(studioTypeIcon(type), size: 18),
-                          label: Text(studioTypeLabel(type)),
+                              : const Icon(Icons.summarize_outlined, size: 18),
+                          label: Text(
+                            _useChapterScope
+                                ? 'Chapter summary'
+                                : 'Book summary',
+                          ),
                           onPressed: (_isGenerating || _isPreparing)
                               ? null
-                              : () => _generate(type),
-                        );
-                      }).toList(),
+                              : () => _generate(
+                                    StudioArtifactType.studyGuide,
+                                    studyGuideFormat:
+                                        CustomStudyGuideFormat.bookSummary,
+                                  ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 24),
                     Text(

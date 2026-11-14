@@ -282,6 +282,35 @@ class ImportService {
     return importedBooks;
   }
 
+  Future<Book> importOrGetExisting(String sourcePath) async {
+    final file = File(sourcePath);
+    if (!await file.exists()) {
+      throw FileSystemException('Source file does not exist', sourcePath);
+    }
+
+    final ext = extensionOf(sourcePath);
+    if (ext == null || !SupportedFormats.isSupported(ext)) {
+      throw UnsupportedFormatException('Extension .${ext ?? '?'} is not supported');
+    }
+
+    final existingBooks = await bookRepository.getAllBooks();
+    final sourceName = p.basename(sourcePath);
+    final targetTitle = formatTitleFromPath(sourcePath).toLowerCase();
+
+    for (final book in existingBooks) {
+      final storedName = p.basename(book.filePath);
+      if (storedName == sourceName ||
+          storedName.endsWith('_$sourceName') ||
+          (book.title.toLowerCase() == targetTitle && book.format == ext)) {
+        if (await File(book.filePath).exists()) {
+          return book;
+        }
+      }
+    }
+
+    return importFile(sourcePath);
+  }
+
   Future<Book> importFile(String sourcePath) async {
     final file = File(sourcePath);
     if (!await file.exists()) {

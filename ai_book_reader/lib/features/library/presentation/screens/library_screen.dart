@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import '../../../../data/import/import_service.dart';
+import '../../../../data/import/incoming_file_service.dart';
 import '../../../../data/local/book_repository.dart';
 import '../../../../data/models/book.dart';
 import '../widgets/browse_books_sheet.dart';
@@ -31,6 +32,100 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   bool _isSearching = false;
   bool _isImporting = false;
   final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initIncomingFileHandler();
+    });
+  }
+
+  Future<void> _initIncomingFileHandler() async {
+    try {
+      final incomingService = ref.read(incomingFileServiceProvider);
+
+      // Listen for new incoming files when app is already alive
+      incomingService.setFileOpenListener((paths) {
+        if (mounted && paths.isNotEmpty) {
+          _handleIncomingFiles(paths);
+        }
+      });
+
+      // Check for initial files from cold start
+      final initialPaths = await incomingService.getInitialFiles();
+      if (mounted && initialPaths.isNotEmpty) {
+        _handleIncomingFiles(initialPaths);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _handleIncomingFiles(List<String> paths) async {
+    if (paths.isEmpty || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                paths.length == 1
+                    ? 'Opening book...'
+                    : 'Opening ${paths.length} books...',
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
+    try {
+      final incomingService = ref.read(incomingFileServiceProvider);
+      final books = await incomingService.processFiles(paths);
+
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+
+      if (books.isNotEmpty) {
+        if (books.length == 1) {
+          final book = books.first;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Opened "${book.title}"'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          context.push('/reader/${book.id}');
+        } else {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Added ${books.length} books to your library'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not open file: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {

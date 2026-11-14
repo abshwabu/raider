@@ -16,7 +16,10 @@ void openStudioArtifact(BuildContext context, StudioArtifact artifact) {
       page = FlashcardsViewer(payloadJson: artifact.payloadJson);
       break;
     case StudioArtifactType.studyGuide:
-      page = StudyGuideViewer(payloadJson: artifact.payloadJson);
+      page = StudyGuideViewer(
+        payloadJson: artifact.payloadJson,
+        title: artifact.title,
+      );
       break;
     case StudioArtifactType.slides:
       page = SlidesViewer(payloadJson: artifact.payloadJson);

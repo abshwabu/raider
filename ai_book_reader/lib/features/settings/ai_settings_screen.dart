@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/ai_settings_service.dart';
-import '../ai/provider/ai_provider.dart';
 import '../ai/provider/ai_provider_factory.dart';
 
 class AiSettingsScreen extends ConsumerStatefulWidget {

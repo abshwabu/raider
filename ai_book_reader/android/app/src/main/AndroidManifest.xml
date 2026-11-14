@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <application
         android:label="Raider"
         android:name="${applicationName}"
@@ -24,6 +25,203 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Intent filter: View files by MIME type -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/x-zip-compressed-ebook" />
+                <data android:mimeType="application/x-mobipocket-ebook" />
+                <data android:mimeType="application/x-mobi" />
+                <data android:mimeType="application/vnd.amazon.ebook" />
+                <data android:mimeType="application/x-mobi8-ebook" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.comicbook+zip" />
+                <data android:mimeType="application/vnd.comicbook-rar" />
+                <data android:mimeType="application/x-cbz" />
+                <data android:mimeType="application/x-cbr" />
+                <data android:mimeType="application/x-comicbook" />
+            </intent-filter>
+
+            <!-- Intent filter: View files by generic / binary octet-stream with pathPattern & pathSuffix -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\.EPUB" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\.cbz" />
+                <data android:pathPattern=".*\\.CBZ" />
+                <data android:pathPattern=".*\\.cbr" />
+                <data android:pathPattern=".*\\.CBR" />
+                <data android:pathPattern=".*\\.mobi" />
+                <data android:pathPattern=".*\\.MOBI" />
+                <data android:pathPattern=".*\\.azw3" />
+                <data android:pathPattern=".*\\.AZW3" />
+                <data android:pathSuffix=".epub" />
+                <data android:pathSuffix=".EPUB" />
+                <data android:pathSuffix=".pdf" />
+                <data android:pathSuffix=".PDF" />
+                <data android:pathSuffix=".txt" />
+                <data android:pathSuffix=".TXT" />
+                <data android:pathSuffix=".docx" />
+                <data android:pathSuffix=".DOCX" />
+                <data android:pathSuffix=".cbz" />
+                <data android:pathSuffix=".CBZ" />
+                <data android:pathSuffix=".cbr" />
+                <data android:pathSuffix=".CBR" />
+                <data android:pathSuffix=".mobi" />
+                <data android:pathSuffix=".MOBI" />
+                <data android:pathSuffix=".azw3" />
+                <data android:pathSuffix=".AZW3" />
+            </intent-filter>
+
+            <!-- Intent filter: View files by wildcard MIME type */* with pathPattern & pathSuffix -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\.EPUB" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\.cbz" />
+                <data android:pathPattern=".*\\.CBZ" />
+                <data android:pathPattern=".*\\.cbr" />
+                <data android:pathPattern=".*\\.CBR" />
+                <data android:pathPattern=".*\\.mobi" />
+                <data android:pathPattern=".*\\.MOBI" />
+                <data android:pathPattern=".*\\.azw3" />
+                <data android:pathPattern=".*\\.AZW3" />
+                <data android:pathSuffix=".epub" />
+                <data android:pathSuffix=".EPUB" />
+                <data android:pathSuffix=".pdf" />
+                <data android:pathSuffix=".PDF" />
+                <data android:pathSuffix=".txt" />
+                <data android:pathSuffix=".TXT" />
+                <data android:pathSuffix=".docx" />
+                <data android:pathSuffix=".DOCX" />
+                <data android:pathSuffix=".cbz" />
+                <data android:pathSuffix=".CBZ" />
+                <data android:pathSuffix=".cbr" />
+                <data android:pathSuffix=".CBR" />
+                <data android:pathSuffix=".mobi" />
+                <data android:pathSuffix=".MOBI" />
+                <data android:pathSuffix=".azw3" />
+                <data android:pathSuffix=".AZW3" />
+            </intent-filter>
+
+            <!-- Intent filter: View files directly without MIME type specified -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\.EPUB" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\.cbz" />
+                <data android:pathPattern=".*\\.CBZ" />
+                <data android:pathPattern=".*\\.cbr" />
+                <data android:pathPattern=".*\\.CBR" />
+                <data android:pathPattern=".*\\.mobi" />
+                <data android:pathPattern=".*\\.MOBI" />
+                <data android:pathPattern=".*\\.azw3" />
+                <data android:pathPattern=".*\\.AZW3" />
+                <data android:pathSuffix=".epub" />
+                <data android:pathSuffix=".EPUB" />
+                <data android:pathSuffix=".pdf" />
+                <data android:pathSuffix=".PDF" />
+                <data android:pathSuffix=".txt" />
+                <data android:pathSuffix=".TXT" />
+                <data android:pathSuffix=".docx" />
+                <data android:pathSuffix=".DOCX" />
+                <data android:pathSuffix=".cbz" />
+                <data android:pathSuffix=".CBZ" />
+                <data android:pathSuffix=".cbr" />
+                <data android:pathSuffix=".CBR" />
+                <data android:pathSuffix=".mobi" />
+                <data android:pathSuffix=".MOBI" />
+                <data android:pathSuffix=".azw3" />
+                <data android:pathSuffix=".AZW3" />
+            </intent-filter>
+
+            <!-- Intent filter: Receive shared files via ACTION_SEND -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/x-zip-compressed-ebook" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.comicbook+zip" />
+                <data android:mimeType="application/vnd.comicbook-rar" />
+                <data android:mimeType="application/x-cbz" />
+                <data android:mimeType="application/x-cbr" />
+                <data android:mimeType="application/x-comicbook" />
+                <data android:mimeType="application/x-mobipocket-ebook" />
+                <data android:mimeType="application/x-mobi" />
+                <data android:mimeType="application/vnd.amazon.ebook" />
+                <data android:mimeType="application/x-mobi8-ebook" />
+            </intent-filter>
+
+            <!-- Intent filter: Receive multiple shared files via ACTION_SEND_MULTIPLE -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/x-zip-compressed-ebook" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.comicbook+zip" />
+                <data android:mimeType="application/vnd.comicbook-rar" />
+                <data android:mimeType="application/x-cbz" />
+                <data android:mimeType="application/x-cbr" />
+                <data android:mimeType="application/x-comicbook" />
+                <data android:mimeType="application/x-mobipocket-ebook" />
+                <data android:mimeType="application/x-mobi" />
+                <data android:mimeType="application/vnd.amazon.ebook" />
+                <data android:mimeType="application/x-mobi8-ebook" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -8,8 +8,10 @@ import '../../data/local/chat_repository.dart';
 import '../../data/local/chunk_repository.dart';
 import '../../data/models/chat_message.dart';
 import '../ai/chat/chat_service.dart';
+import '../ai/chat/prompt_templates.dart';
 import '../ai/embedding/embedding_service.dart';
 import '../ai/provider/ai_provider.dart';
+import 'widgets/prompt_template_sheet.dart';
 
 class AiChatScreen extends ConsumerStatefulWidget {
   final int bookId;
@@ -230,6 +232,25 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     }
   }
 
+  void _usePrompt(PromptTemplate template, {bool autoSend = false}) {
+    final prompt = template.getEffectivePrompt(
+      selectedPassage: widget.selectedPassage,
+    );
+    if (autoSend) {
+      _sendMessage(prompt);
+    } else {
+      _textController.text = prompt;
+    }
+  }
+
+  void _openPromptLibrary() {
+    PromptTemplateSheet.show(
+      context,
+      onSelect: (template) => _usePrompt(template, autoSend: false),
+      onSend: (template) => _usePrompt(template, autoSend: true),
+    );
+  }
+
   Future<List<String>> _getChapterNamesForChunks(List<int> chunkIds) async {
     if (chunkIds.isEmpty) return [];
     final chunkRepo = ref.read(chunkRepositoryProvider);
@@ -256,11 +277,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       maxChildSize: 0.95,
       expand: false,
       builder: (context, scrollController) {
-        return Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
+        return Material(
+          color: theme.colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
               // Drag Handle & Header
@@ -428,7 +448,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
             const SizedBox(height: 8),
             Text(
-              '${(_embeddingCurrent)} of ${_embeddingTotal} chunks processed',
+              '$_embeddingCurrent of $_embeddingTotal chunks processed',
               style: theme.textTheme.bodySmall,
             ),
           ],
@@ -439,17 +459,18 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   Widget _buildEmptyChatState(ThemeData theme) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.chat_bubble_outline_rounded,
-              size: 56,
+              size: 48,
               color: theme.colorScheme.primary.withAlpha(120),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               widget.selectedPassage != null &&
                       widget.selectedPassage!.trim().isNotEmpty
@@ -457,7 +478,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   : 'Ask anything about this book',
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               widget.selectedPassage != null &&
                       widget.selectedPassage!.trim().isNotEmpty
@@ -465,6 +486,45 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                   : 'Your questions will be answered using grounded excerpts directly from "${widget.bookTitle}".',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 15,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Suggested Prompts',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ...PromptTemplateLibrary.quickStarters.map((starter) {
+                  return ActionChip(
+                    avatar: Icon(starter.icon, size: 16),
+                    label: Text(starter.title),
+                    onPressed: () => _usePrompt(starter, autoSend: true),
+                  );
+                }),
+                ActionChip(
+                  avatar: const Icon(Icons.more_horiz_rounded, size: 16),
+                  label: const Text('Browse all prompts'),
+                  onPressed: _openPromptLibrary,
+                ),
+              ],
             ),
           ],
         ),
@@ -747,6 +807,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           ],
           Row(
             children: [
+              IconButton(
+                tooltip: 'Prompt Templates',
+                icon: const Icon(Icons.auto_awesome_outlined),
+                color: theme.colorScheme.primary,
+                onPressed: _isStreaming ? null : _openPromptLibrary,
+              ),
               Expanded(
                 child: TextField(
                   controller: _textController,

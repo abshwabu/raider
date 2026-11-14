@@ -54,6 +54,7 @@ class StudioService {
     required int bookId,
     required StudioArtifactType type,
     int? chapterId,
+    CustomStudyGuideFormat studyGuideFormat = CustomStudyGuideFormat.executiveBrief,
   }) async {
     final book = await bookRepository.getBook(bookId);
     if (book == null) {
@@ -85,16 +86,30 @@ class StudioService {
       );
     }
 
-    final systemPrompt = promptBuilder.buildStudioSystemPrompt(
-      book: book,
-      type: type,
-      scope: scope,
-    );
-    final userPrompt = promptBuilder.buildStudioUserPrompt(
-      type: type,
-      excerpts: excerpts,
-      chapterTitle: chapterTitle,
-    );
+    final systemPrompt = (type == StudioArtifactType.studyGuide &&
+            studyGuideFormat == CustomStudyGuideFormat.bookSummary)
+        ? promptBuilder.buildBookSummarySystemPrompt(
+            book: book,
+            scope: scope,
+          )
+        : promptBuilder.buildStudioSystemPrompt(
+            book: book,
+            type: type,
+            scope: scope,
+          );
+
+    final userPrompt = (type == StudioArtifactType.studyGuide &&
+            studyGuideFormat == CustomStudyGuideFormat.bookSummary)
+        ? promptBuilder.buildBookSummaryUserPrompt(
+            excerpts: excerpts,
+            chapterTitle: chapterTitle,
+          )
+        : promptBuilder.buildStudioUserPrompt(
+            type: type,
+            excerpts: excerpts,
+            chapterTitle: chapterTitle,
+            studyGuideFormat: studyGuideFormat,
+          );
 
     var raw = await _complete(
       systemPrompt: systemPrompt,
@@ -103,11 +118,11 @@ class StudioService {
 
     Map<String, dynamic> payload;
     try {
-      payload = _parseAndValidate(type, raw);
+      payload = _parseAndValidate(type, raw, studyGuideFormat);
     } catch (_) {
       // One repair retry with stricter instructions.
       final retryInstruction = type == StudioArtifactType.studyGuide
-          ? 'Your previous response was invalid. Return a comprehensive study guide formatted directly in Markdown with Briefing, Key Ideas, FAQ, and Glossary sections.'
+          ? 'Your previous response was invalid. Return the requested content formatted directly in Markdown with clear section headers, without enclosing JSON or outer code fences.'
           : 'Your previous response was invalid. Return ONLY valid JSON matching the required schema, with no markdown fences or commentary.';
       raw = await _complete(
         systemPrompt: systemPrompt,
@@ -115,7 +130,7 @@ class StudioService {
 
 $retryInstruction''',
       );
-      payload = _parseAndValidate(type, raw);
+      payload = _parseAndValidate(type, raw, studyGuideFormat);
     }
 
     final title = _titleFor(type, payload, book.title, chapterTitle);
@@ -131,6 +146,19 @@ $retryInstruction''',
     final id = await artifactRepository.saveArtifact(artifact);
     artifact.id = id;
     return artifact;
+  }
+
+  /// Convenience helper to generate a comprehensive book or chapter summary.
+  Future<StudioArtifact> generateBookSummary({
+    required int bookId,
+    int? chapterId,
+  }) {
+    return generate(
+      bookId: bookId,
+      type: StudioArtifactType.studyGuide,
+      chapterId: chapterId,
+      studyGuideFormat: CustomStudyGuideFormat.bookSummary,
+    );
   }
 
   Future<String> _complete({
@@ -150,15 +178,19 @@ $retryInstruction''',
 
   Map<String, dynamic> _parseAndValidate(
     StudioArtifactType type,
-    String raw,
-  ) {
+    String raw, [
+    CustomStudyGuideFormat studyGuideFormat = CustomStudyGuideFormat.executiveBrief,
+  ]) {
     switch (type) {
       case StudioArtifactType.studyGuide:
-        final guide = StudyGuidePayload.fromRaw(raw);
+        final guide = StudyGuidePayload.fromRaw(raw, studyGuideFormat);
         if (guide.markdown.trim().isEmpty) {
           throw const FormatException('Study guide markdown was empty');
         }
-        return {'markdown': guide.markdown};
+        return {
+          'markdown': guide.markdown,
+          'format': guide.format.id,
+        };
       case StudioArtifactType.quiz:
         final quiz = QuizPayload.fromJson(decodeJsonObject(raw));
         if (quiz.questions.isEmpty) {
@@ -238,7 +270,14 @@ $retryInstruction''',
       case StudioArtifactType.flashcards:
         return 'Flashcards$scopeSuffix';
       case StudioArtifactType.studyGuide:
-        return 'Study guide$scopeSuffix';
+        final formatId = payload['format']?.toString();
+        final format = CustomStudyGuideFormat.fromId(formatId);
+        if (format == CustomStudyGuideFormat.bookSummary) {
+          return scopeSuffix.isNotEmpty
+              ? 'Chapter Summary$scopeSuffix'
+              : 'Book Summary · $bookTitle';
+        }
+        return 'Study guide: ${format.label}$scopeSuffix';
       case StudioArtifactType.slides:
         return ((payload['title'] as String?)?.trim().isNotEmpty ?? false)
             ? payload['title'] as String
