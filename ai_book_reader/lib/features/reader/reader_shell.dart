@@ -23,6 +23,10 @@ import 'pdf/pdf_parser.dart';
 import 'pdf/pdf_reader_screen.dart';
 import 'shared/ai_speed_dial_fab.dart';
 import 'shared/chapter_list_drawer.dart';
+import 'shared/reader_preferences.dart';
+import 'shared/reader_settings_sheet.dart';
+import 'tts/tts_player_bar.dart';
+import 'tts/tts_service.dart';
 import 'txt/txt_parser.dart';
 import 'txt/txt_reader_screen.dart';
 
@@ -221,6 +225,70 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
     } else if (format == 'mobi' || format == 'azw3') {
       _mobiKey.currentState?.jumpToChapter(index);
     }
+
+    // If TTS was active, switch TTS to the new chapter
+    final ttsState = ref.read(ttsServiceProvider);
+    if (!ttsState.isStopped) {
+      _speakCurrentChapter(startFromBeginning: true);
+    }
+  }
+
+  String _getCurrentChapterText() {
+    if (_chapters.isEmpty ||
+        _currentChapterIndex < 0 ||
+        _currentChapterIndex >= _chapters.length) {
+      return '';
+    }
+    final format = _book?.format.toLowerCase();
+    String text = '';
+    if (format == 'epub') {
+      text = _epubKey.currentState?.getCurrentChapterPlainText() ?? '';
+    } else if (format == 'txt') {
+      text = _txtKey.currentState?.getCurrentChapterPlainText() ?? '';
+    } else if (format == 'docx') {
+      text = _docxKey.currentState?.getCurrentChapterPlainText() ?? '';
+    } else if (format == 'mobi' || format == 'azw3') {
+      text = _mobiKey.currentState?.getCurrentChapterPlainText() ?? '';
+    }
+    if (text.isEmpty && _currentChapterIndex < _chapters.length) {
+      text = _chapters[_currentChapterIndex].content;
+    }
+    return text;
+  }
+
+  void _toggleTts() {
+    final ttsState = ref.read(ttsServiceProvider);
+    final ttsNotifier = ref.read(ttsServiceProvider.notifier);
+
+    if (ttsState.isPlaying) {
+      ttsNotifier.pause();
+    } else if (ttsState.isPaused) {
+      ttsNotifier.resume();
+    } else {
+      _speakCurrentChapter(startFromBeginning: false);
+    }
+  }
+
+  void _speakCurrentChapter({bool startFromBeginning = false}) {
+    if (_book == null || _chapters.isEmpty) return;
+    final currentChapter = _chapters[_currentChapterIndex];
+    final text = _getCurrentChapterText();
+
+    if (text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No readable text found for this section.')),
+      );
+      return;
+    }
+
+    final ttsNotifier = ref.read(ttsServiceProvider.notifier);
+    ttsNotifier.speakChapter(
+      bookId: _book!.id,
+      chapterId: currentChapter.id,
+      chapterTitle: currentChapter.title,
+      text: text,
+      startParagraph: startFromBeginning ? 0 : 0,
+    );
   }
 
   Widget _buildFormatBody() {
@@ -330,9 +398,13 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
 
     final format = _book!.format.toLowerCase();
     final isComic = format == 'cbz' || format == 'cbr';
+    final prefs = ref.watch(readerPreferencesProvider);
+    final ttsState = ref.watch(ttsServiceProvider);
+    final themeMode = prefs.themeMode;
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: themeMode.backgroundColor,
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(_showChrome ? kToolbarHeight : 0),
         child: AnimatedSlide(
@@ -344,11 +416,38 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
             duration: const Duration(milliseconds: 200),
             child: AppBar(
               title: Text(_book!.title),
+              backgroundColor: themeMode.cardColor,
+              foregroundColor: themeMode.textColor,
               actions: isComic
                   ? null
                   : [
                       IconButton(
-                        icon: const Icon(Icons.format_list_bulleted_rounded),
+                        icon: Icon(
+                          ttsState.isPlaying
+                              ? Icons.pause_circle_filled_rounded
+                              : Icons.headphones_rounded,
+                          color: ttsState.isPlaying
+                              ? themeMode.accentColor
+                              : themeMode.textColor,
+                        ),
+                        tooltip: ttsState.isPlaying
+                            ? 'Pause Speech'
+                            : 'Read Aloud (TTS)',
+                        onPressed: _toggleTts,
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.tune_rounded,
+                          color: themeMode.textColor,
+                        ),
+                        tooltip: 'Themes & Fonts',
+                        onPressed: () => showReaderSettingsSheet(context),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.format_list_bulleted_rounded,
+                          color: themeMode.textColor,
+                        ),
                         tooltip: 'Table of Contents',
                         onPressed: () {
                           _scaffoldKey.currentState?.openEndDrawer();
@@ -377,7 +476,9 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
                 opacity: _showChrome ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 200),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 58),
+                  padding: EdgeInsets.only(
+                    bottom: !ttsState.isStopped ? 155 : 58,
+                  ),
                   child: AiSpeedDialFab(
                     isVisible: _showChrome,
                     onOpenStudio: _openStudio,
@@ -386,14 +487,32 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
                 ),
               ),
             ),
-      body: NotificationListener<UserScrollNotification>(
-        onNotification: (notification) {
-          if (notification.direction != ScrollDirection.idle) {
-            _hideChrome();
-          }
-          return false;
-        },
-        child: _buildFormatBody(),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: NotificationListener<UserScrollNotification>(
+              onNotification: (notification) {
+                if (notification.direction != ScrollDirection.idle) {
+                  _hideChrome();
+                }
+                return false;
+              },
+              child: _buildFormatBody(),
+            ),
+          ),
+          if (!ttsState.isStopped)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: TtsPlayerBar(
+                  onClose: () {},
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

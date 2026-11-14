@@ -5,35 +5,10 @@ import '../../../data/local/book_repository.dart';
 import '../../../data/local/reading_position_service.dart';
 import '../../../data/models/book.dart';
 import '../../../data/models/chapter.dart';
+import '../shared/reader_preferences.dart';
+import '../shared/reader_settings_sheet.dart';
 import '../shared/selection/selectable_annotated_text.dart';
-
-enum TxtReaderTheme {
-  light(
-    name: 'Light',
-    backgroundColor: Color(0xFFFFFFFF),
-    textColor: Color(0xFF1A1A1A),
-  ),
-  sepia(
-    name: 'Sepia',
-    backgroundColor: Color(0xFFFBF0D9),
-    textColor: Color(0xFF5F4B32),
-  ),
-  dark(
-    name: 'Dark',
-    backgroundColor: Color(0xFF121212),
-    textColor: Color(0xFFE0E0E0),
-  );
-
-  final String name;
-  final Color backgroundColor;
-  final Color textColor;
-
-  const TxtReaderTheme({
-    required this.name,
-    required this.backgroundColor,
-    required this.textColor,
-  });
-}
+import '../tts/tts_service.dart';
 
 class TxtReaderScreen extends ConsumerStatefulWidget {
   final Book book;
@@ -60,10 +35,14 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
   int _currentChapterIndex = 0;
   Timer? _debounceTimer;
 
-  double _fontSize = 16.0;
-  TxtReaderTheme _readerTheme = TxtReaderTheme.light;
-
   int get currentChapterIndex => _currentChapterIndex;
+
+  String getCurrentChapterPlainText() {
+    if (_currentChapterIndex >= 0 && _currentChapterIndex < widget.chapters.length) {
+      return widget.chapters[_currentChapterIndex].content;
+    }
+    return '';
+  }
 
   @override
   void initState() {
@@ -188,81 +167,7 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
   }
 
   void showSettingsModal() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Reader Settings',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Font Size (${_fontSize.toInt()}pt)',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Row(
-                    children: [
-                      const Text('A', style: TextStyle(fontSize: 12)),
-                      Expanded(
-                        child: Slider(
-                          value: _fontSize,
-                          min: 12.0,
-                          max: 28.0,
-                          divisions: 8,
-                          label: '${_fontSize.toInt()}pt',
-                          onChanged: (val) {
-                            setState(() => _fontSize = val);
-                            setModalState(() {});
-                          },
-                        ),
-                      ),
-                      const Text('A', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Theme',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: TxtReaderTheme.values.map((t) {
-                      final isSelected = t == _readerTheme;
-                      return ChoiceChip(
-                        label: Text(t.name),
-                        selected: isSelected,
-                        selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() => _readerTheme = t);
-                            setModalState(() {});
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    showReaderSettingsSheet(context);
   }
 
   @override
@@ -274,9 +179,22 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
     }
 
     final currentChapter = widget.chapters[_currentChapterIndex];
+    final prefs = ref.watch(readerPreferencesProvider);
+    final ttsState = ref.watch(ttsServiceProvider);
+    final themeMode = prefs.themeMode;
+
+    TextRange? activeTtsRange;
+    if (ttsState.chapterId == currentChapter.id &&
+        ttsState.currentParagraph != null &&
+        (ttsState.isPlaying || ttsState.isPaused)) {
+      activeTtsRange = TextRange(
+        start: ttsState.currentParagraph!.startOffset,
+        end: ttsState.currentParagraph!.endOffset,
+      );
+    }
 
     return Container(
-      color: _readerTheme.backgroundColor,
+      color: themeMode.backgroundColor,
       child: Column(
         children: [
           Expanded(
@@ -288,36 +206,40 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: ClampingScrollPhysics(),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: prefs.horizontalPadding,
+                  vertical: 14.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             currentChapter.title,
-                            style: TextStyle(
-                              fontSize: _fontSize * 1.3,
-                              fontWeight: FontWeight.bold,
-                              color: _readerTheme.textColor,
-                            ),
+                            style: prefs
+                                .getTextStyle(
+                                  overrideFontSize: prefs.fontSize * 1.35,
+                                )
+                                .copyWith(fontWeight: FontWeight.bold),
                           ),
                         ),
                         IconButton(
                           icon: Icon(
-                            Icons.text_fields_rounded,
-                            color: _readerTheme.textColor,
+                            Icons.text_format_rounded,
+                            color: themeMode.textColor.withValues(alpha: 0.8),
                           ),
-                          tooltip: 'Font & Theme Settings',
+                          tooltip: 'Reader Appearance',
                           onPressed: showSettingsModal,
                         ),
                       ],
                     ),
                     Divider(
                       height: 24,
-                      color: _readerTheme.textColor.withValues(alpha: 0.3),
+                      color: themeMode.borderColor,
                     ),
                     SelectableAnnotatedText(
                       bookId: widget.book.id,
@@ -325,11 +247,12 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
                       chapterId: currentChapter.id,
                       text: currentChapter.content,
                       onTap: widget.onTapBody,
-                      style: TextStyle(
-                        fontSize: _fontSize,
-                        height: 1.6,
-                        color: _readerTheme.textColor,
-                      ),
+                      activeTtsRange: activeTtsRange,
+                      ttsHighlightColor: themeMode.accentColor,
+                      textAlign: prefs.isJustified
+                          ? TextAlign.justify
+                          : TextAlign.left,
+                      style: prefs.getTextStyle(),
                     ),
                   ],
                 ),
@@ -342,16 +265,14 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
             child: widget.showControls
                 ? Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color: _readerTheme.backgroundColor == Colors.white
-                        ? Theme.of(context).colorScheme.surfaceContainerHighest
-                        : _readerTheme.textColor.withValues(alpha: 0.1),
+                    color: themeMode.cardColor,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         IconButton(
                           icon: Icon(
                             Icons.chevron_left_rounded,
-                            color: _readerTheme.textColor,
+                            color: themeMode.textColor,
                           ),
                           tooltip: 'Previous Section',
                           onPressed: _currentChapterIndex > 0
@@ -360,12 +281,16 @@ class TxtReaderScreenState extends ConsumerState<TxtReaderScreen> {
                         ),
                         Text(
                           'Section ${_currentChapterIndex + 1} of ${widget.chapters.length}',
-                          style: TextStyle(color: _readerTheme.textColor),
+                          style: TextStyle(
+                            color: themeMode.textColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                          ),
                         ),
                         IconButton(
                           icon: Icon(
                             Icons.chevron_right_rounded,
-                            color: _readerTheme.textColor,
+                            color: themeMode.textColor,
                           ),
                           tooltip: 'Next Section',
                           onPressed: _currentChapterIndex < widget.chapters.length - 1

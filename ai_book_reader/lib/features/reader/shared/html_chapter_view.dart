@@ -5,6 +5,9 @@ import '../../../data/local/book_repository.dart';
 import '../../../data/local/reading_position_service.dart';
 import '../../../data/models/book.dart';
 import '../../../data/models/chapter.dart';
+import 'reader_preferences.dart';
+import 'reader_settings_sheet.dart';
+import '../tts/tts_service.dart';
 import 'selection/html_plain_text.dart';
 import 'selection/selectable_annotated_text.dart';
 
@@ -181,6 +184,8 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
     ref.read(bookRepositoryProvider).updateReadingProgress(widget.book.id, progress);
   }
 
+  String getCurrentChapterPlainText() => _getPlainText(_currentChapterIndex);
+
   String _getPlainText(int chapterIndex) {
     if (chapterIndex < 0 || chapterIndex >= widget.chapters.length) return '';
     return _plainTextCache.putIfAbsent(
@@ -199,105 +204,154 @@ class HtmlChapterViewState extends ConsumerState<HtmlChapterView> {
 
     final currentChapter = widget.chapters[_currentChapterIndex];
     final plainText = _getPlainText(_currentChapterIndex);
-    final theme = Theme.of(context);
+    final prefs = ref.watch(readerPreferencesProvider);
+    final ttsState = ref.watch(ttsServiceProvider);
+    final themeMode = prefs.themeMode;
 
-    return Column(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: widget.onTapBody,
-            child: SingleChildScrollView(
-              key: ValueKey('html_chapter_${widget.book.id}_$_currentChapterIndex'),
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: ClampingScrollPhysics(),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    currentChapter.title,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
+    TextRange? activeTtsRange;
+    if (ttsState.chapterId == currentChapter.id &&
+        ttsState.currentParagraph != null &&
+        (ttsState.isPlaying || ttsState.isPaused)) {
+      activeTtsRange = TextRange(
+        start: ttsState.currentParagraph!.startOffset,
+        end: ttsState.currentParagraph!.endOffset,
+      );
+    }
+
+    return Container(
+      color: themeMode.backgroundColor,
+      child: Column(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: widget.onTapBody,
+              child: SingleChildScrollView(
+                key: ValueKey('html_chapter_${widget.book.id}_$_currentChapterIndex'),
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
+                padding: EdgeInsets.symmetric(
+                  horizontal: prefs.horizontalPadding,
+                  vertical: 14.0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            currentChapter.title,
+                            style: prefs
+                                .getTextStyle(
+                                  overrideFontSize: prefs.fontSize * 1.35,
+                                )
+                                .copyWith(fontWeight: FontWeight.bold),
+                          ),
                         ),
-                  ),
-                  const Divider(height: 24),
-                  SelectableAnnotatedText(
-                    bookId: widget.book.id,
-                    bookTitle: widget.book.title,
-                    chapterId: currentChapter.id,
-                    text: plainText,
-                    onTap: widget.onTapBody,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                          height: 1.6,
-                        ) ??
-                        const TextStyle(fontSize: 16, height: 1.6),
-                  ),
-                ],
+                        IconButton(
+                          icon: Icon(
+                            Icons.text_format_rounded,
+                            color: themeMode.textColor.withValues(alpha: 0.8),
+                          ),
+                          tooltip: 'Reader Appearance',
+                          onPressed: () => showReaderSettingsSheet(context),
+                        ),
+                      ],
+                    ),
+                    Divider(
+                      height: 24,
+                      color: themeMode.borderColor,
+                    ),
+                    SelectableAnnotatedText(
+                      bookId: widget.book.id,
+                      bookTitle: widget.book.title,
+                      chapterId: currentChapter.id,
+                      text: plainText,
+                      onTap: widget.onTapBody,
+                      activeTtsRange: activeTtsRange,
+                      ttsHighlightColor: themeMode.accentColor,
+                      textAlign: prefs.isJustified
+                          ? TextAlign.justify
+                          : TextAlign.left,
+                      style: prefs.getTextStyle(),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        // In-chapter reading progress and navigation controls (collapsible during reading)
-        AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          child: widget.showControls
-              ? ValueListenableBuilder<double>(
-                  valueListenable: _inChapterProgressNotifier,
-                  builder: (context, inChapterProgress, _) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        LinearProgressIndicator(
-                          value: inChapterProgress.clamp(0.0, 1.0),
-                          minHeight: 2.5,
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            theme.colorScheme.primary.withAlpha(200),
+          // In-chapter reading progress and navigation controls (collapsible during reading)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: widget.showControls
+                ? ValueListenableBuilder<double>(
+                    valueListenable: _inChapterProgressNotifier,
+                    builder: (context, inChapterProgress, _) {
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LinearProgressIndicator(
+                            value: inChapterProgress.clamp(0.0, 1.0),
+                            minHeight: 2.5,
+                            backgroundColor: themeMode.borderColor,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              themeMode.accentColor,
+                            ),
                           ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.chevron_left_rounded),
-                                tooltip: 'Previous Chapter',
-                                onPressed: _currentChapterIndex > 0
-                                    ? () => jumpToChapter(_currentChapterIndex - 1)
-                                    : null,
-                              ),
-                              Expanded(
-                                child: Text(
-                                  'Chapter ${_currentChapterIndex + 1} of ${widget.chapters.length} · ${(inChapterProgress * 100).round()}%',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w500,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            color: themeMode.cardColor,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.chevron_left_rounded,
+                                    color: themeMode.textColor,
+                                  ),
+                                  tooltip: 'Previous Chapter',
+                                  onPressed: _currentChapterIndex > 0
+                                      ? () => jumpToChapter(_currentChapterIndex - 1)
+                                      : null,
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    'Chapter ${_currentChapterIndex + 1} of ${widget.chapters.length} · ${(inChapterProgress * 100).round()}%',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      color: themeMode.textColor,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.chevron_right_rounded),
-                                tooltip: 'Next Chapter',
-                                onPressed: _currentChapterIndex < widget.chapters.length - 1
-                                    ? () => jumpToChapter(_currentChapterIndex + 1)
-                                    : null,
-                              ),
-                            ],
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: themeMode.textColor,
+                                  ),
+                                  tooltip: 'Next Chapter',
+                                  onPressed: _currentChapterIndex < widget.chapters.length - 1
+                                      ? () => jumpToChapter(_currentChapterIndex + 1)
+                                      : null,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  },
-                )
-              : const SizedBox.shrink(),
-        ),
-      ],
+                        ],
+                      );
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
     );
   }
 }

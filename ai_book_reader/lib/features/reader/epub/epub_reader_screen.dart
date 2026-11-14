@@ -29,6 +29,9 @@ class EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
 
   int get currentChapterIndex => _htmlViewKey.currentState?.currentChapterIndex ?? 0;
 
+  String getCurrentChapterPlainText() =>
+      _htmlViewKey.currentState?.getCurrentChapterPlainText() ?? '';
+
   void jumpToChapter(int index) {
     _htmlViewKey.currentState?.jumpToChapter(index);
   }

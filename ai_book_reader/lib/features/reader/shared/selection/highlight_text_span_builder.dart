@@ -4,7 +4,8 @@ import '../../../../data/models/annotation.dart';
 import 'annotation_colors.dart';
 
 class HighlightTextSpanBuilder {
-  /// Builds a [TextSpan] tree with highlight backgrounds for [annotations].
+  /// Builds a [TextSpan] tree with highlight backgrounds for [annotations]
+  /// and optional [activeTtsRange] for text-to-speech reading.
   /// Overlapping ranges use last-writer-wins for the overlapping segment.
   ///
   /// Callers that pass [onTapAnnotation] should dispose [recognizersOut]
@@ -15,12 +16,16 @@ class HighlightTextSpanBuilder {
     required TextStyle baseStyle,
     void Function(Annotation annotation)? onTapAnnotation,
     List<TapGestureRecognizer>? recognizersOut,
+    TextRange? activeTtsRange,
+    Color? ttsHighlightColor,
   }) {
     if (text.isEmpty) {
       return TextSpan(text: '', style: baseStyle);
     }
 
-    final ranges = annotations
+    final effectiveAnnotations = List<Annotation>.from(annotations);
+
+    final ranges = effectiveAnnotations
         .where((a) => a.startOffset < a.endOffset)
         .map((a) => (
               start: a.startOffset.clamp(0, text.length),
@@ -31,62 +36,84 @@ class HighlightTextSpanBuilder {
         .toList()
       ..sort((a, b) => a.start.compareTo(b.start));
 
-    if (ranges.isEmpty) {
+    final hasTts = activeTtsRange != null &&
+        activeTtsRange.start >= 0 &&
+        activeTtsRange.end > activeTtsRange.start &&
+        activeTtsRange.start < text.length;
+    final ttsStart = hasTts ? activeTtsRange.start.clamp(0, text.length) : -1;
+    final ttsEnd = hasTts ? activeTtsRange.end.clamp(0, text.length) : -1;
+    final defaultTtsColor = (ttsHighlightColor ?? const Color(0xFF38BDF8)).withValues(alpha: 0.32);
+
+    if (ranges.isEmpty && !hasTts) {
       return TextSpan(text: text, style: baseStyle);
     }
 
     final children = <InlineSpan>[];
 
-    final events = <_Event>[];
+    final splitPoints = <int>{0, text.length};
     for (final r in ranges) {
-      events.add(_Event(r.start, true, r.annotation));
-      events.add(_Event(r.end, false, r.annotation));
+      splitPoints.add(r.start);
+      splitPoints.add(r.end);
     }
-    events.sort((a, b) {
-      final byPos = a.pos.compareTo(b.pos);
-      if (byPos != 0) return byPos;
-      if (a.isStart != b.isStart) return a.isStart ? 1 : -1;
-      return 0;
-    });
+    if (hasTts) {
+      splitPoints.add(ttsStart);
+      splitPoints.add(ttsEnd);
+    }
+    final sortedPoints = splitPoints.toList()..sort();
 
-    final active = <Annotation>[];
-    var segmentStart = 0;
+    for (int i = 0; i < sortedPoints.length - 1; i++) {
+      final segStart = sortedPoints[i];
+      final segEnd = sortedPoints[i + 1];
+      if (segStart >= segEnd) continue;
 
-    void flush(int end) {
-      if (end <= segmentStart) return;
-      final slice = text.substring(segmentStart, end);
-      final top = active.isEmpty ? null : active.last;
-      if (top == null) {
-        children.add(TextSpan(text: slice, style: baseStyle));
-      } else {
-        TapGestureRecognizer? recognizer;
-        if (onTapAnnotation != null) {
-          recognizer = TapGestureRecognizer()
-            ..onTap = () => onTapAnnotation(top);
-          recognizersOut?.add(recognizer);
+      final slice = text.substring(segStart, segEnd);
+
+      // Check if inside TTS range
+      final isInsideTts = hasTts && segStart >= ttsStart && segEnd <= ttsEnd;
+
+      // Check if inside any user annotations (last one wins)
+      Annotation? topAnnotation;
+      for (final r in ranges) {
+        if (segStart >= r.start && segEnd <= r.end) {
+          topAnnotation = r.annotation;
         }
-        children.add(
-          TextSpan(
-            text: slice,
-            style: baseStyle.copyWith(
-              backgroundColor: top.color.fillColor,
-            ),
-            recognizer: recognizer,
-          ),
+      }
+
+      Color? bgColor;
+      if (topAnnotation != null) {
+        bgColor = topAnnotation.color.fillColor;
+      } else if (isInsideTts) {
+        bgColor = defaultTtsColor;
+      }
+
+      TapGestureRecognizer? recognizer;
+      if (topAnnotation != null && onTapAnnotation != null) {
+        recognizer = TapGestureRecognizer()
+          ..onTap = () => onTapAnnotation(topAnnotation!);
+        recognizersOut?.add(recognizer);
+      }
+
+      TextStyle segStyle = baseStyle;
+      if (bgColor != null) {
+        segStyle = segStyle.copyWith(backgroundColor: bgColor);
+      }
+      if (isInsideTts && topAnnotation != null) {
+        // Subtle underline when user highlight coincides with TTS speaking
+        segStyle = segStyle.copyWith(
+          decoration: TextDecoration.underline,
+          decorationColor: defaultTtsColor,
+          decorationThickness: 2.0,
         );
       }
-      segmentStart = end;
-    }
 
-    for (final event in events) {
-      flush(event.pos);
-      if (event.isStart) {
-        active.add(event.annotation);
-      } else {
-        active.removeWhere((a) => a.id == event.annotation.id);
-      }
+      children.add(
+        TextSpan(
+          text: slice,
+          style: segStyle,
+          recognizer: recognizer,
+        ),
+      );
     }
-    flush(text.length);
 
     if (children.isEmpty) {
       return TextSpan(text: text, style: baseStyle);
@@ -94,12 +121,4 @@ class HighlightTextSpanBuilder {
 
     return TextSpan(style: baseStyle, children: children);
   }
-}
-
-class _Event {
-  final int pos;
-  final bool isStart;
-  final Annotation annotation;
-
-  _Event(this.pos, this.isStart, this.annotation);
 }

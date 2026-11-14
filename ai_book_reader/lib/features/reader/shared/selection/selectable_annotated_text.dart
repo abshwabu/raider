@@ -16,6 +16,9 @@ class SelectableAnnotatedText extends ConsumerStatefulWidget {
   final String text;
   final TextStyle style;
   final VoidCallback? onTap;
+  final TextRange? activeTtsRange;
+  final Color? ttsHighlightColor;
+  final TextAlign? textAlign;
 
   const SelectableAnnotatedText({
     super.key,
@@ -25,6 +28,9 @@ class SelectableAnnotatedText extends ConsumerStatefulWidget {
     required this.text,
     required this.style,
     this.onTap,
+    this.activeTtsRange,
+    this.ttsHighlightColor,
+    this.textAlign,
   });
 
   @override
@@ -95,6 +101,8 @@ class _SelectableAnnotatedTextState
       baseStyle: widget.style,
       onTapAnnotation: _onTapAnnotation,
       recognizersOut: _recognizers,
+      activeTtsRange: widget.activeTtsRange,
+      ttsHighlightColor: widget.ttsHighlightColor,
     );
     if (staleRecognizers.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -108,6 +116,7 @@ class _SelectableAnnotatedTextState
     return SelectableText.rich(
       span,
       onTap: widget.onTap,
+      textAlign: widget.textAlign,
       contextMenuBuilder: (context, editableTextState) {
         return buildSelectionActionToolbar(
           context: context,
