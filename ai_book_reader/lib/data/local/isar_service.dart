@@ -7,6 +7,7 @@ import '../models/chapter.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/chunk.dart';
+import '../models/daily_reading_stat.dart';
 import '../models/studio_artifact.dart';
 
 final isarProvider = Provider<Isar>((ref) {
@@ -26,6 +27,7 @@ class IsarService {
           ChatMessageSchema,
           StudioArtifactSchema,
           AnnotationSchema,
+          DailyReadingStatSchema,
         ],
         directory: path,
         inspector: false,

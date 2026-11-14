@@ -6,6 +6,7 @@ import 'features/library/presentation/screens/library_screen.dart';
 import 'features/reader/presentation/screens/reader_screen.dart';
 import 'features/settings/ai_settings_screen.dart';
 import 'features/splash/presentation/screens/splash_screen.dart';
+import 'features/stats/presentation/screens/reading_stats_screen.dart';
 
 final _router = GoRouter(
   initialLocation: '/splash',
@@ -22,6 +23,10 @@ final _router = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => const AiSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/stats',
+      builder: (context, state) => const ReadingStatsScreen(),
     ),
     GoRoute(
       path: '/reader/:bookId',

@@ -6,8 +6,14 @@ import 'package:path/path.dart' as p;
 import '../../../../data/import/import_service.dart';
 import '../../../../data/import/incoming_file_service.dart';
 import '../../../../data/local/book_repository.dart';
+import '../../../../data/local/reading_stats_repository.dart';
 import '../../../../data/models/book.dart';
 import '../widgets/browse_books_sheet.dart';
+
+final streakSummaryProvider = FutureProvider.autoDispose<ReadingStreakSummary>((ref) async {
+  final repo = ref.watch(readingStatsRepositoryProvider);
+  return await repo.getStreakSummary();
+});
 
 enum BookSortOption {
   recentlyAdded('Recently Added'),
@@ -503,6 +509,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               }).toList(),
             ),
             IconButton(
+              icon: const Icon(Icons.insights_rounded),
+              tooltip: 'Reading Goals & Stats',
+              onPressed: () {
+                context.push('/stats');
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.settings_outlined),
               tooltip: 'AI & BYOK Settings',
               onPressed: () {
@@ -518,6 +531,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             const LinearProgressIndicator(
               minHeight: 3,
             ),
+          _buildDailyGoalHeader(context, theme),
           Expanded(
             child: booksAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -580,6 +594,117 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             : const Icon(Icons.add),
         label: Text(_isImporting ? 'Importing...' : 'Add Books'),
       ),
+    );
+  }
+
+  Widget _buildDailyGoalHeader(BuildContext context, ThemeData theme) {
+    final streakAsync = ref.watch(streakSummaryProvider);
+
+    return streakAsync.when(
+      data: (summary) {
+        final streak = summary.currentStreak;
+        final mins = summary.todayMinutes;
+        final goal = summary.todayGoalMinutes;
+        final fraction = summary.todayProgressFraction;
+        final isMet = summary.isTodayGoalMet;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Material(
+            color: isMet
+                ? Colors.teal.withValues(alpha: 0.08)
+                : theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: isMet
+                    ? Colors.teal.withValues(alpha: 0.3)
+                    : theme.colorScheme.primary.withValues(alpha: 0.15),
+              ),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => context.push('/stats'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.local_fire_department_rounded,
+                      color: streak > 0 ? const Color(0xFFF05A28) : Colors.grey,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      streak > 0 ? '$streak day streak' : 'Start streak',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: streak > 0 ? const Color(0xFFF05A28) : Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '•',
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                isMet ? 'Goal Met 🎉' : '$mins / $goal mins',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isMet ? Colors.teal : theme.colorScheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                '${(fraction * 100).toInt()}%',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: fraction,
+                              minHeight: 4,
+                              backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isMet ? Colors.teal : theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: Colors.grey.shade500,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 

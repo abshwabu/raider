@@ -1,12 +1,17 @@
 package com.aibookreader.ai_book_reader
 
+import android.Manifest
 import android.content.ContentResolver
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,7 +20,9 @@ import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.aibookreader.ai_book_reader/incoming_files"
+    private val REMINDER_CHANNEL = "com.aibookreader.ai_book_reader/reading_reminder"
     private var methodChannel: MethodChannel? = null
+    private var reminderChannel: MethodChannel? = null
     private val pendingFilePaths = mutableListOf<String>()
 
     override fun getInitialRoute(): String {
@@ -24,6 +31,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ReadingReminderManager.createNotificationChannel(this)
         handleIntent(intent)
     }
 
@@ -44,6 +52,67 @@ class MainActivity : FlutterActivity() {
                     val paths = ArrayList(pendingFilePaths)
                     pendingFilePaths.clear()
                     result.success(paths)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Setup Reading Reminder Method Channel
+        val rChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, REMINDER_CHANNEL)
+        reminderChannel = rChannel
+        rChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "scheduleHourlyReminder" -> {
+                    ReadingReminderManager.scheduleHourlyReminder(this)
+                    result.success(true)
+                }
+                "cancelHourlyReminder" -> {
+                    ReadingReminderManager.cancelHourlyReminder(this)
+                    result.success(true)
+                }
+                "updateGoalStatus" -> {
+                    val isGoalMet = call.argument<Boolean>("isGoalMet") ?: false
+                    val currentMinutes = call.argument<Int>("currentMinutes") ?: 0
+                    val goalMinutes = call.argument<Int>("goalMinutes") ?: 30
+                    val enabled = call.argument<Boolean>("enabled") ?: true
+
+                    if (enabled) {
+                        if (isGoalMet) {
+                            ReadingReminderManager.cancelHourlyReminder(this)
+                        } else {
+                            ReadingReminderManager.scheduleHourlyReminder(this)
+                        }
+                    } else {
+                        ReadingReminderManager.cancelHourlyReminder(this)
+                    }
+                    result.success(true)
+                }
+                "showTestNotification" -> {
+                    ReadingReminderManager.showTestNotification(this)
+                    result.success(true)
+                }
+                "checkNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val granted = ContextCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        result.success(granted)
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "requestNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                            1002
+                        )
+                        result.success(true)
+                    } else {
+                        result.success(true)
+                    }
                 }
                 else -> result.notImplemented()
             }

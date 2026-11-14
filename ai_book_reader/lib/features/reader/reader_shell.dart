@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/book_repository.dart';
 import '../../data/local/chapter_repository.dart';
 import '../../data/local/reading_position_service.dart';
+import '../../data/local/reading_stats_repository.dart';
 import '../../data/models/book.dart';
 import '../../data/models/chapter.dart';
 import '../ai/chunking/chunking_service.dart';
 import '../ai_chat/ai_chat_screen.dart';
+import '../stats/services/reading_reminder_service.dart';
 import '../studio/studio_hub_screen.dart';
 import 'comic/comic_parser.dart';
 import 'comic/comic_reader_screen.dart';
@@ -42,7 +44,7 @@ class ReaderShell extends ConsumerStatefulWidget {
   ConsumerState<ReaderShell> createState() => _ReaderShellState();
 }
 
-class _ReaderShellState extends ConsumerState<ReaderShell> {
+class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey<PdfReaderScreenState> _pdfKey = GlobalKey<PdfReaderScreenState>();
   final GlobalKey<EpubReaderScreenState> _epubKey = GlobalKey<EpubReaderScreenState>();
@@ -57,10 +59,107 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
   int _currentChapterIndex = 0;
   bool _showChrome = true;
 
+  Timer? _readingTimer;
+  int _uncommittedSeconds = 0;
+  bool _isTrackingActive = true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startReadingSessionTimer();
     _loadBookAndChapters();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopReadingSessionTimer();
+    _flushReadingStats();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _isTrackingActive = false;
+      _flushReadingStats();
+    } else if (state == AppLifecycleState.resumed) {
+      _isTrackingActive = true;
+    }
+  }
+
+  void _startReadingSessionTimer() {
+    _readingTimer?.cancel();
+    _readingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isTrackingActive || _isLoading || _book == null) return;
+      _uncommittedSeconds++;
+      if (_uncommittedSeconds >= 10) {
+        _flushReadingStats();
+      }
+    });
+  }
+
+  void _stopReadingSessionTimer() {
+    _readingTimer?.cancel();
+    _readingTimer = null;
+  }
+
+  Future<void> _flushReadingStats({int pagesIncrement = 0}) async {
+    final book = _book;
+    final seconds = _uncommittedSeconds;
+    if (book == null || (seconds <= 0 && pagesIncrement <= 0)) return;
+
+    _uncommittedSeconds = 0;
+    try {
+      final statsRepo = ref.read(readingStatsRepositoryProvider);
+      final justReachedGoal = await statsRepo.recordReadingTime(
+        seconds: seconds,
+        bookId: book.id,
+        pagesIncrement: pagesIncrement,
+      );
+
+      final todayStat = await statsRepo.getOrCreateTodayStat();
+      final reminderService = ref.read(readingReminderServiceProvider);
+      unawaited(reminderService.syncGoalStatus(
+        isGoalMet: todayStat.isGoalMet,
+        activeSeconds: todayStat.activeSeconds,
+        goalMinutes: todayStat.goalMinutes,
+      ));
+
+      if (justReachedGoal && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.teal.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            content: Row(
+              children: [
+                const Icon(Icons.stars_rounded, color: Colors.amber, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '🎉 Goal Reached! You completed your ${todayStat.goalMinutes}-min daily reading goal today!',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
+  void _recordPageTurn() {
+    final book = _book;
+    if (book == null) return;
+    try {
+      ref.read(readingStatsRepositoryProvider).recordPagesRead(
+        pages: 1,
+        bookId: book.id,
+      );
+    } catch (_) {}
   }
 
   void _toggleChrome() {
@@ -209,6 +308,9 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
   }
 
   void _onChapterSelected(int index, Chapter chapter) {
+    if (_currentChapterIndex != index) {
+      _recordPageTurn();
+    }
     setState(() {
       _currentChapterIndex = index;
     });
@@ -310,6 +412,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
+              _recordPageTurn();
               setState(() => _currentChapterIndex = index);
             }
           },
@@ -323,6 +426,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
+              _recordPageTurn();
               setState(() => _currentChapterIndex = index);
             }
           },
@@ -336,6 +440,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
+              _recordPageTurn();
               setState(() => _currentChapterIndex = index);
             }
           },
@@ -357,6 +462,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> {
           onTapBody: _toggleChrome,
           onChapterChanged: (index) {
             if (_currentChapterIndex != index) {
+              _recordPageTurn();
               setState(() => _currentChapterIndex = index);
             }
           },
