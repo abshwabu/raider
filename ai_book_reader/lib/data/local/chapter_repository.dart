@@ -29,4 +29,20 @@ class ChapterRepository {
       await isar.chapters.putAll(chapters);
     });
   }
+
+  Future<void> deleteChaptersForBook(int bookId) async {
+    await isar.writeTxn(() async {
+      await isar.chapters.filter().bookIdEqualTo(bookId).deleteAll();
+    });
+  }
+
+  Future<void> replaceChapters(int bookId, List<Chapter> chapters) async {
+    await isar.writeTxn(() async {
+      await isar.chapters.filter().bookIdEqualTo(bookId).deleteAll();
+      for (final chapter in chapters) {
+        chapter.bookId = bookId;
+      }
+      await isar.chapters.putAll(chapters);
+    });
+  }
 }

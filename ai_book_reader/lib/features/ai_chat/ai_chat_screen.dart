@@ -11,6 +11,7 @@ import '../ai/chat/chat_service.dart';
 import '../ai/chat/prompt_templates.dart';
 import '../ai/embedding/embedding_service.dart';
 import '../ai/provider/ai_provider.dart';
+import '../reader/ocr/book_ocr_scanner.dart';
 import 'widgets/prompt_template_sheet.dart';
 
 class AiChatScreen extends ConsumerStatefulWidget {
@@ -37,6 +38,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   bool _isInitializing = true;
   bool _needsApiKey = false;
+  bool _needsOcrScan = false;
+  bool _isOcrScanning = false;
   bool _isEmbedding = false;
   int _embeddingCurrent = 0;
   int _embeddingTotal = 0;
@@ -81,6 +84,14 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           });
         }
         return;
+      }
+
+      final ocrScanner = ref.read(bookOcrScannerProvider);
+      final isScannedNoText = await ocrScanner.isBookScannedWithoutText(widget.bookId);
+      if (isScannedNoText && mounted) {
+        setState(() {
+          _needsOcrScan = true;
+        });
       }
 
       final chunkRepo = ref.read(chunkRepositoryProvider);
@@ -176,6 +187,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   Future<void> _sendMessage([String? textOverride]) async {
     final question = (textOverride ?? _textController.text).trim();
     if (question.isEmpty || _isStreaming) return;
+
+    if (_needsOcrScan) {
+      await _runOcrScan();
+      if (_needsOcrScan) return;
+    }
 
     if (textOverride == null) {
       _textController.clear();
@@ -340,6 +356,61 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     );
   }
 
+  Future<void> _runOcrScan() async {
+    setState(() {
+      _isOcrScanning = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final scanner = ref.read(bookOcrScannerProvider);
+      final result = await scanner.scanAndEnrichBook(widget.bookId);
+      if (result.success) {
+        try {
+          final embeddingService = ref.read(embeddingServiceProvider);
+          await embeddingService.ensureEmbeddingsGenerated(widget.bookId, force: true);
+        } catch (_) {}
+
+        final chapterRepo = ref.read(chapterRepositoryProvider);
+        final chapters = await chapterRepo.getChaptersForBook(widget.bookId);
+        final chapterMap = <int, String>{};
+        for (final c in chapters) {
+          chapterMap[c.id] = c.title;
+        }
+
+        if (mounted) {
+          setState(() {
+            _needsOcrScan = false;
+            _isOcrScanning = false;
+            _chapterTitleMap = chapterMap;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Scanned ${result.pagesScanned} pages (${result.totalCharacters} chars). AI features are now active!',
+              ),
+              backgroundColor: Colors.green.shade800,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isOcrScanning = false;
+            _errorMessage = result.errorMessage ?? 'OCR scanning completed with no text.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isOcrScanning = false;
+          _errorMessage = 'OCR failed: $e';
+        });
+      }
+    }
+  }
+
   Widget _buildBody(ThemeData theme) {
     if (_isInitializing && !_isEmbedding) {
       return const Center(child: CircularProgressIndicator());
@@ -349,12 +420,88 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       return _buildApiKeyPrompt(theme);
     }
 
+    if (_isOcrScanning) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 24),
+              Text(
+                'Scanning Document with OCR...',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Extracting text from scanned pages so AI can understand and answer questions.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_isEmbedding) {
       return _buildEmbeddingProgress(theme);
     }
 
     return Column(
       children: [
+        if (_needsOcrScan)
+          Container(
+            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C2416),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amberAccent.withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.document_scanner_rounded, color: Colors.amberAccent, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Scanned Pages Detected',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'This document consists of scanned images without text. Run OCR to enable AI answers.',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amberAccent,
+                    foregroundColor: Colors.black87,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  icon: const Icon(Icons.auto_fix_high, size: 16),
+                  label: const Text('Scan OCR'),
+                  onPressed: _runOcrScan,
+                ),
+              ],
+            ),
+          ),
         if (_errorMessage != null)
           Container(
             padding: const EdgeInsets.all(12),

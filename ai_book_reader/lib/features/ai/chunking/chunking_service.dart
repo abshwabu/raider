@@ -21,11 +21,21 @@ class ChunkingService {
     TextChunker? textChunker,
   }) : textChunker = textChunker ?? TextChunker();
 
-  Future<void> chunkBook(int bookId) async {
-    // Skip chunking if chunks already exist for this book (avoid duplicate work)
+  Future<void> chunkBook(int bookId, {bool force = false}) async {
     final existingChunks = await chunkRepository.getChunksForBook(bookId);
-    if (existingChunks.isNotEmpty) {
+
+    final isAllPlaceholder = existingChunks.isNotEmpty &&
+        existingChunks.every((c) =>
+            c.text.startsWith('Content for pages') ||
+            c.text.startsWith('Pages ') ||
+            c.text.trim().isEmpty);
+
+    if (existingChunks.isNotEmpty && !force && !isAllPlaceholder) {
       return;
+    }
+
+    if (force || isAllPlaceholder) {
+      await chunkRepository.deleteChunksForBook(bookId);
     }
 
     final chapters = await chapterRepository.getChaptersForBook(bookId);
@@ -37,7 +47,7 @@ class ChunkingService {
 
     for (final chapter in chapters) {
       final rawText = chapter.content;
-      if (rawText.trim().isEmpty) continue;
+      if (rawText.trim().isEmpty || rawText.startsWith('Content for pages')) continue;
 
       final chunkTexts = textChunker.chunkText(rawText);
 

@@ -15,14 +15,19 @@ import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.aibookreader.ai_book_reader/incoming_files"
     private val REMINDER_CHANNEL = "com.aibookreader.ai_book_reader/reading_reminder"
+    private val OCR_CHANNEL = "com.aibookreader.ai_book_reader/ocr"
     private var methodChannel: MethodChannel? = null
     private var reminderChannel: MethodChannel? = null
+    private var ocrMethodChannel: MethodChannel? = null
     private val pendingFilePaths = mutableListOf<String>()
 
     override fun getInitialRoute(): String {
@@ -135,6 +140,58 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } else {
                         result.success(true)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Setup OCR Method Channel
+        val oChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OCR_CHANNEL)
+        ocrMethodChannel = oChannel
+        oChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isAvailable" -> {
+                    result.success(OcrManager.isAvailable())
+                }
+                "ocrPdf" -> {
+                    val filePath = call.argument<String>("filePath")
+                    val startPage = call.argument<Int>("startPage") ?: 0
+                    val endPage = call.argument<Int>("endPage") ?: -1
+                    val maxPages = call.argument<Int>("maxPages") ?: 200
+
+                    if (filePath.isNullOrEmpty()) {
+                        result.error("INVALID_ARGUMENT", "filePath must not be null or empty", null)
+                        return@setMethodCallHandler
+                    }
+
+                    CoroutineScope(Dispatchers.Main).launch {
+                        try {
+                            val pages = OcrManager.ocrPdfPages(
+                                filePath = filePath,
+                                startPage = startPage,
+                                endPage = endPage,
+                                maxPages = maxPages
+                            )
+                            result.success(pages)
+                        } catch (e: Exception) {
+                            result.error("OCR_ERROR", e.message, null)
+                        }
+                    }
+                }
+                "ocrImage" -> {
+                    val imagePath = call.argument<String>("imagePath")
+                    if (imagePath.isNullOrEmpty()) {
+                        result.error("INVALID_ARGUMENT", "imagePath must not be null or empty", null)
+                        return@setMethodCallHandler
+                    }
+                    CoroutineScope(Dispatchers.Main).launch {
+                        try {
+                            val text = OcrManager.ocrImage(this@MainActivity, imagePath)
+                            result.success(text)
+                        } catch (e: Exception) {
+                            result.error("OCR_ERROR", e.message, null)
+                        }
                     }
                 }
                 else -> result.notImplemented()

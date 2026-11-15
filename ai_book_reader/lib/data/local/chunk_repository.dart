@@ -54,4 +54,10 @@ class ChunkRepository {
         .count();
     return count > 0;
   }
+
+  Future<void> deleteChunksForBook(int bookId) async {
+    await isar.writeTxn(() async {
+      await isar.chunks.filter().bookIdEqualTo(bookId).deleteAll();
+    });
+  }
 }

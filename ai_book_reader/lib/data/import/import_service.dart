@@ -10,6 +10,7 @@ import '../../features/reader/comic/comic_parser.dart';
 import '../../features/reader/docx/docx_parser.dart';
 import '../../features/reader/epub/epub_parser.dart';
 import '../../features/reader/mobi/mobi_parser.dart';
+import '../../features/reader/ocr/ocr_service.dart';
 import '../../features/reader/pdf/pdf_parser.dart';
 import '../../features/reader/txt/txt_parser.dart';
 import '../local/book_repository.dart';
@@ -56,13 +57,20 @@ final importServiceProvider = Provider<ImportService>((ref) {
   final bookRepo = ref.watch(bookRepositoryProvider);
   final chapterRepo = ref.watch(chapterRepositoryProvider);
   final chunkingService = ref.watch(chunkingServiceProvider);
-  return ImportService(bookRepo, chapterRepo, chunkingService: chunkingService);
+  final ocrService = ref.watch(ocrServiceProvider);
+  return ImportService(
+    bookRepo,
+    chapterRepo,
+    chunkingService: chunkingService,
+    ocrService: ocrService,
+  );
 });
 
 class ImportService {
   final BookRepository bookRepository;
   final ChapterRepository chapterRepository;
   final ChunkingService? chunkingService;
+  final OcrService? ocrService;
 
   static const _skipDirNames = {
     '.',
@@ -78,6 +86,7 @@ class ImportService {
     this.bookRepository,
     this.chapterRepository, {
     this.chunkingService,
+    this.ocrService,
   });
 
   static String formatTitleFromPath(String sourcePath) {
@@ -350,6 +359,7 @@ class ImportService {
           bookId: book.id,
           filePath: targetPath,
           chapterRepository: chapterRepository,
+          ocrService: ocrService,
         );
       } catch (_) {}
     } else if (ext == 'epub') {

@@ -17,11 +17,14 @@ class EmbeddingService {
 
   Future<void> ensureEmbeddingsGenerated(
     int bookId, {
+    bool force = false,
     void Function(int current, int total)? onProgress,
   }) async {
-    final hasExisting = await chunkRepository.hasEmbeddings(bookId);
-    if (hasExisting) {
-      return;
+    if (!force) {
+      final hasExisting = await chunkRepository.hasEmbeddings(bookId);
+      if (hasExisting) {
+        return;
+      }
     }
 
     final chunks = await chunkRepository.getChunksForBook(bookId);

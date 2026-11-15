@@ -43,6 +43,7 @@ class FakeEmbeddingService extends Fake implements EmbeddingService {
   @override
   Future<void> ensureEmbeddingsGenerated(
     int bookId, {
+    bool force = false,
     void Function(int current, int total)? onProgress,
   }) async {}
 

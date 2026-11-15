@@ -8,6 +8,7 @@ import '../ai/embedding/embedding_service.dart';
 import '../ai/provider/ai_provider.dart';
 import '../ai/studio/studio_payloads.dart';
 import '../ai/studio/studio_service.dart';
+import '../reader/ocr/book_ocr_scanner.dart';
 import 'studio_navigation.dart';
 import 'widgets/study_guide_format_sheet.dart';
 
@@ -33,6 +34,8 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
   bool _useChapterScope = false;
   bool _isPreparing = false;
   bool _isGenerating = false;
+  bool _needsOcrScan = false;
+  bool _isOcrScanning = false;
   StudioArtifactType? _generatingType;
   CustomStudyGuideFormat? _generatingFormat;
   String? _statusMessage;
@@ -57,6 +60,14 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
         });
       }
       return;
+    }
+
+    final ocrScanner = ref.read(bookOcrScannerProvider);
+    final isScannedNoText = await ocrScanner.isBookScannedWithoutText(widget.bookId);
+    if (isScannedNoText && mounted) {
+      setState(() {
+        _needsOcrScan = true;
+      });
     }
 
     setState(() {
@@ -97,11 +108,54 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
     }
   }
 
+  Future<void> _runOcrScan() async {
+    setState(() {
+      _isOcrScanning = true;
+      _errorMessage = null;
+      _statusMessage = 'Scanning document text with OCR...';
+    });
+
+    try {
+      final scanner = ref.read(bookOcrScannerProvider);
+      final result = await scanner.scanAndEnrichBook(widget.bookId);
+      if (result.success) {
+        if (mounted) {
+          setState(() {
+            _needsOcrScan = false;
+            _isOcrScanning = false;
+          });
+          await _prepareEmbeddings();
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isOcrScanning = false;
+            _errorMessage = result.errorMessage ?? 'OCR scanning completed with no text.';
+            _statusMessage = null;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isOcrScanning = false;
+          _errorMessage = 'OCR failed: $e';
+          _statusMessage = null;
+        });
+      }
+    }
+  }
+
   Future<void> _generate(
     StudioArtifactType type, {
     CustomStudyGuideFormat? studyGuideFormat,
   }) async {
-    if (_isGenerating || _isPreparing) return;
+    if (_isGenerating || _isPreparing || _isOcrScanning) return;
+
+    if (_needsOcrScan) {
+      await _runOcrScan();
+      if (_needsOcrScan) return;
+    }
 
     final settings = ref.read(aiSettingsServiceProvider);
     final key = await settings.getByokKey();
@@ -261,6 +315,65 @@ class _StudioHubScreenState extends ConsumerState<StudioHubScreen> {
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
+                    if (_needsOcrScan) ...[
+                      Card(
+                        color: const Color(0xFF2C2416),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.amberAccent.withOpacity(0.4)),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.document_scanner_rounded, color: Colors.amberAccent, size: 28),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Scanned Document Detected',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'This PDF consists of scanned pages. Scan text with OCR to generate quizzes, flashcards, and study guides.',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.amberAccent,
+                                  foregroundColor: Colors.black87,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                ),
+                                onPressed: _isOcrScanning ? null : _runOcrScan,
+                                child: _isOcrScanning
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Text('Scan OCR'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     if (_errorMessage != null) ...[
                       Card(
                         color: theme.colorScheme.errorContainer,

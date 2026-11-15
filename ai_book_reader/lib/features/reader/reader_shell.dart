@@ -21,6 +21,8 @@ import 'epub/epub_parser.dart';
 import 'epub/epub_reader_screen.dart';
 import 'mobi/mobi_parser.dart';
 import 'mobi/mobi_reader_screen.dart';
+import 'ocr/book_ocr_scanner.dart';
+import 'ocr/ocr_service.dart';
 import 'pdf/pdf_parser.dart';
 import 'pdf/pdf_reader_screen.dart';
 import 'shared/ai_speed_dial_fab.dart';
@@ -56,6 +58,8 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
   Book? _book;
   List<Chapter> _chapters = [];
   bool _isLoading = true;
+  bool _isScannedPdfWithoutText = false;
+  bool _isOcrScanning = false;
   int _currentChapterIndex = 0;
   bool _showChrome = true;
 
@@ -247,6 +251,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
               bookId: book.id,
               filePath: book.filePath,
               chapterRepository: chapterRepo,
+              ocrService: ref.read(ocrServiceProvider),
             );
           } else if (format == 'epub') {
             chapters = await EpubParser.extractChapters(
@@ -276,6 +281,11 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
           }
         }
 
+        bool isScannedNoText = false;
+        if (format == 'pdf') {
+          isScannedNoText = await ref.read(bookOcrScannerProvider).isBookScannedWithoutText(book.id);
+        }
+
         if (format != 'cbz' && format != 'cbr') {
           unawaited(ref.read(chunkingServiceProvider).chunkBook(book.id));
         }
@@ -294,6 +304,7 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
           setState(() {
             _book = book;
             _chapters = chapters;
+            _isScannedPdfWithoutText = isScannedNoText;
             _currentChapterIndex = initialChapterIndex;
             _isLoading = false;
           });
@@ -391,6 +402,93 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
       text: text,
       startParagraph: startFromBeginning ? 0 : 0,
     );
+  }
+
+  Future<void> _runOcrScan() async {
+    if (_book == null || _isOcrScanning) return;
+
+    setState(() {
+      _isOcrScanning = true;
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2E),
+          title: const Row(
+            children: [
+              Icon(Icons.document_scanner_rounded, color: Colors.amberAccent),
+              SizedBox(width: 10),
+              Text('Scanning Document', style: TextStyle(color: Colors.white, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Running on-device OCR on scanned pages so AI features (Chat, Studio, Summaries) and Text-to-Speech can read the document...',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              SizedBox(height: 20),
+              LinearProgressIndicator(),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final scanner = ref.read(bookOcrScannerProvider);
+      final result = await scanner.scanAndEnrichBook(_book!.id);
+
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        if (result.success) {
+          final chapters = await ref.read(chapterRepositoryProvider).getChaptersForBook(_book!.id);
+          setState(() {
+            _chapters = chapters;
+            _isScannedPdfWithoutText = false;
+            _isOcrScanning = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Extracted text from ${result.pagesScanned} pages (${result.totalCharacters} characters)! AI features are now ready.',
+              ),
+              backgroundColor: Colors.green.shade800,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        } else {
+          setState(() {
+            _isOcrScanning = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'OCR scanning completed with no text.'),
+              backgroundColor: Colors.orange.shade800,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        setState(() {
+          _isOcrScanning = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OCR error: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildFormatBody() {
@@ -527,6 +625,12 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
               actions: isComic
                   ? null
                   : [
+                      if (format == 'pdf')
+                        IconButton(
+                          icon: const Icon(Icons.document_scanner_rounded),
+                          tooltip: 'Scan Document (OCR)',
+                          onPressed: _runOcrScan,
+                        ),
                       IconButton(
                         icon: Icon(
                           ttsState.isPlaying
@@ -606,6 +710,43 @@ class _ReaderShellState extends ConsumerState<ReaderShell> with WidgetsBindingOb
               child: _buildFormatBody(),
             ),
           ),
+          if (_isScannedPdfWithoutText && _showChrome)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Material(
+                color: const Color(0xFF2C2416),
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.document_scanner_rounded, color: Colors.amberAccent, size: 20),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Scanned pages detected. Scan with OCR for AI assistance & TTS.',
+                          style: TextStyle(color: Colors.white, fontSize: 13, height: 1.2),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.amberAccent,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: _runOcrScan,
+                        child: const Text('Scan OCR'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (!ttsState.isStopped)
             Positioned(
               left: 0,
