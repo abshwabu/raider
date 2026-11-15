@@ -161,6 +161,14 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
 
     if (chosen != null && chosen != currentGoal) {
       await statsRepo.setDailyGoal(chosen);
+      final reminderService = ref.read(readingReminderServiceProvider);
+      final today = await statsRepo.getOrCreateTodayStat();
+      await reminderService.syncGoalStatus(
+        isGoalMet: today.isGoalMet,
+        activeSeconds: today.activeSeconds,
+        goalMinutes: today.goalMinutes,
+      );
+      statsRepo.notifyStatsChanged();
       await _loadStatsAndPreferences();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

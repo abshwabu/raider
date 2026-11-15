@@ -10,9 +10,9 @@ import '../../../../data/local/reading_stats_repository.dart';
 import '../../../../data/models/book.dart';
 import '../widgets/browse_books_sheet.dart';
 
-final streakSummaryProvider = FutureProvider.autoDispose<ReadingStreakSummary>((ref) async {
+final streakSummaryProvider = StreamProvider.autoDispose<ReadingStreakSummary>((ref) {
   final repo = ref.watch(readingStatsRepositoryProvider);
-  return await repo.getStreakSummary();
+  return repo.watchStreakSummary();
 });
 
 enum BookSortOption {
@@ -34,7 +34,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
   ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindingObserver {
   bool _isSearching = false;
   bool _isImporting = false;
   final TextEditingController _searchController = TextEditingController();
@@ -42,9 +42,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initIncomingFileHandler();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
+      ref.invalidate(streakSummaryProvider);
+    }
   }
 
   Future<void> _initIncomingFileHandler() async {
@@ -110,7 +119,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               duration: const Duration(seconds: 2),
             ),
           );
-          context.push('/reader/${book.id}');
+          await context.push('/reader/${book.id}');
+          if (mounted) {
+            ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
+            ref.invalidate(streakSummaryProvider);
+          }
         } else {
           messenger.showSnackBar(
             SnackBar(
@@ -135,6 +148,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     super.dispose();
   }
@@ -511,8 +525,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             IconButton(
               icon: const Icon(Icons.insights_rounded),
               tooltip: 'Reading Goals & Stats',
-              onPressed: () {
-                context.push('/stats');
+              onPressed: () async {
+                await context.push('/stats');
+                if (mounted) {
+                  ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
+                  ref.invalidate(streakSummaryProvider);
+                }
               },
             ),
             IconButton(
@@ -624,7 +642,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             ),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: () => context.push('/stats'),
+              onTap: () async {
+                await context.push('/stats');
+                if (mounted) {
+                  ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
+                  ref.invalidate(streakSummaryProvider);
+                }
+              },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(
@@ -781,7 +805,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         final book = books[index];
         return _BookCard(
           book: book,
-          onTap: () => context.push('/reader/${book.id}'),
+          onTap: () async {
+            await context.push('/reader/${book.id}');
+            if (mounted) {
+              ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
+              ref.invalidate(streakSummaryProvider);
+            }
+          },
           onDelete: () => _confirmDeleteBook(book),
         );
       },

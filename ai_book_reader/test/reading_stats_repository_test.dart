@@ -111,5 +111,80 @@ void main() {
       expect(summary2.todayMinutes, equals(40));
       expect(summary2.todayProgressFraction, equals(1.0)); // Clamped to 1.0
     });
+
+    test('calculateStreakSummary preserves yesterday streak on day 2 morning and increments after reading', () {
+      final day1 = DateTime(2026, 11, 14);
+      final day2 = DateTime(2026, 11, 15);
+
+      final statDay1 = DailyReadingStat()
+        ..date = '2026-11-14'
+        ..goalMinutes = 30
+        ..activeSeconds = 360 // 6 mins
+        ..pagesRead = 10;
+
+      // Day 2 morning: user hasn't read yet today, but goal was changed to 10 mins
+      final statDay2Morning = DailyReadingStat()
+        ..date = '2026-11-15'
+        ..goalMinutes = 10
+        ..activeSeconds = 0
+        ..pagesRead = 0;
+
+      final summaryDay2Morning = ReadingStatsRepository.calculateStreakSummary(
+        allStats: [statDay1],
+        today: statDay2Morning,
+        now: day2,
+      );
+
+      // Streak from yesterday is maintained today!
+      expect(summaryDay2Morning.currentStreak, equals(1));
+      expect(summaryDay2Morning.todayMinutes, equals(0));
+      expect(summaryDay2Morning.todayGoalMinutes, equals(10));
+      expect(summaryDay2Morning.isTodayGoalMet, isFalse);
+
+      // Day 2 afternoon: user reads 3 minutes (180s)
+      final statDay2Afternoon = DailyReadingStat()
+        ..date = '2026-11-15'
+        ..goalMinutes = 10
+        ..activeSeconds = 180 // 3 mins
+        ..pagesRead = 5;
+
+      final summaryDay2Afternoon = ReadingStatsRepository.calculateStreakSummary(
+        allStats: [statDay1, statDay2Afternoon],
+        today: statDay2Afternoon,
+        now: day2,
+      );
+
+      // Streak becomes 2 days!
+      expect(summaryDay2Afternoon.currentStreak, equals(2));
+      expect(summaryDay2Afternoon.todayMinutes, equals(3));
+      expect(summaryDay2Afternoon.todayGoalMinutes, equals(10));
+      expect(summaryDay2Afternoon.todayProgressFraction, closeTo(0.3, 0.01));
+    });
+
+    test('watchStreakSummary stream emits updates upon setDailyGoal and recordReadingTime', () async {
+      final emissions = <ReadingStreakSummary>[];
+      final sub = repo.watchStreakSummary().listen(emissions.add);
+
+      // Give event loop time to emit initial value
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(emissions.length, equals(1));
+      expect(emissions.first.todayGoalMinutes, equals(30));
+
+      // Change goal to 10 mins
+      await repo.setDailyGoal(10);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(emissions.length, greaterThanOrEqualTo(2));
+      expect(emissions.last.todayGoalMinutes, equals(10));
+
+      // Record 3 minutes of reading
+      await repo.recordReadingTime(seconds: 180, bookId: 1);
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(emissions.last.todayMinutes, equals(3));
+      expect(emissions.last.todayGoalMinutes, equals(10));
+
+      await sub.cancel();
+    });
   });
 }

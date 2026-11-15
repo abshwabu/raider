@@ -49,6 +49,12 @@ class MockReadingStatsRepository extends Fake implements ReadingStatsRepository 
   Future<void> setDailyGoal(int minutes) async {
     goal = minutes;
   }
+
+  @override
+  void notifyStatsChanged() {}
+
+  @override
+  Stream<ReadingStreakSummary> watchStreakSummary() => Stream.fromFuture(getStreakSummary());
 }
 
 void main() {

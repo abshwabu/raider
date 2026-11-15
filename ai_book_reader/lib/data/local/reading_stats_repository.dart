@@ -57,6 +57,97 @@ abstract class ReadingStatsRepository {
   Future<List<DailyReadingStat>> getAllStats();
   Future<ReadingStreakSummary> getStreakSummary();
   Stream<DailyReadingStat?> watchTodayStat();
+  Stream<ReadingStreakSummary> watchStreakSummary();
+  void notifyStatsChanged();
+
+  static ReadingStreakSummary calculateStreakSummary({
+    required List<DailyReadingStat> allStats,
+    required DailyReadingStat today,
+    DateTime? now,
+  }) {
+    final currentNow = now ?? DateTime.now();
+    int totalSeconds = 0;
+    int totalPages = 0;
+    final Set<String> activeDates = {};
+
+    for (final s in allStats) {
+      totalSeconds += s.activeSeconds;
+      totalPages += s.pagesRead;
+      if (s.activeSeconds >= 30 || s.pagesRead > 0) {
+        activeDates.add(s.date);
+      }
+    }
+
+    if (today.activeSeconds >= 30 || today.pagesRead > 0) {
+      activeDates.add(today.date);
+    }
+
+    final todayStr = IsarReadingStatsRepository.formatDate(currentNow);
+    final yesterdayDate = DateTime(currentNow.year, currentNow.month, currentNow.day - 1);
+    final yesterdayStr = IsarReadingStatsRepository.formatDate(yesterdayDate);
+
+    // Calculate current streak
+    int currentStreak = 0;
+
+    if (activeDates.contains(todayStr)) {
+      // User has read today
+      currentStreak = 1;
+      var checkDate = DateTime(currentNow.year, currentNow.month, currentNow.day - 1);
+      while (activeDates.contains(IsarReadingStatsRepository.formatDate(checkDate))) {
+        currentStreak++;
+        checkDate = DateTime(checkDate.year, checkDate.month, checkDate.day - 1);
+      }
+    } else if (activeDates.contains(yesterdayStr)) {
+      // User hasn't read today yet, but read yesterday.
+      // Streak from yesterday is maintained until today ends.
+      currentStreak = 1;
+      var checkDate = DateTime(currentNow.year, currentNow.month, currentNow.day - 2);
+      while (activeDates.contains(IsarReadingStatsRepository.formatDate(checkDate))) {
+        currentStreak++;
+        checkDate = DateTime(checkDate.year, checkDate.month, checkDate.day - 1);
+      }
+    } else {
+      currentStreak = 0;
+    }
+
+    // Calculate longest streak across all history
+    int longestStreak = currentStreak;
+    if (activeDates.isNotEmpty) {
+      final sortedDates = activeDates.toList()..sort();
+      int tempStreak = 0;
+      DateTime? previousDate;
+
+      for (final dStr in sortedDates) {
+        final d = IsarReadingStatsRepository.parseDate(dStr);
+        if (previousDate == null) {
+          tempStreak = 1;
+        } else {
+          final expectedNext = DateTime(previousDate.year, previousDate.month, previousDate.day + 1);
+          if (IsarReadingStatsRepository.formatDate(d) == IsarReadingStatsRepository.formatDate(expectedNext)) {
+            tempStreak++;
+          } else if (IsarReadingStatsRepository.formatDate(d) != IsarReadingStatsRepository.formatDate(previousDate)) {
+            tempStreak = 1;
+          }
+        }
+        previousDate = d;
+        if (tempStreak > longestStreak) {
+          longestStreak = tempStreak;
+        }
+      }
+    }
+
+    return ReadingStreakSummary(
+      currentStreak: currentStreak,
+      longestStreak: longestStreak,
+      totalDaysRead: activeDates.length,
+      totalReadingSeconds: totalSeconds,
+      totalPagesRead: totalPages,
+      todaySeconds: today.activeSeconds,
+      todayPages: today.pagesRead,
+      todayGoalMinutes: today.goalMinutes,
+      isTodayGoalMet: today.isGoalMet,
+    );
+  }
 }
 
 final readingStatsRepositoryProvider = Provider<ReadingStatsRepository>((ref) {
@@ -73,11 +164,19 @@ final readingStatsRepositoryProvider = Provider<ReadingStatsRepository>((ref) {
 class IsarReadingStatsRepository implements ReadingStatsRepository {
   final Isar _isar;
   final SharedPreferences? _prefs;
+  final StreamController<void> _statsChangeController = StreamController<void>.broadcast();
 
   static const String _keyDailyGoal = 'reading_daily_goal_minutes';
   static const int defaultGoalMinutes = 30;
 
   IsarReadingStatsRepository(this._isar, this._prefs);
+
+  @override
+  void notifyStatsChanged() {
+    if (!_statsChangeController.isClosed) {
+      _statsChangeController.add(null);
+    }
+  }
 
   static String formatDate(DateTime dt) {
     final y = dt.year.toString().padLeft(4, '0');
@@ -132,6 +231,7 @@ class IsarReadingStatsRepository implements ReadingStatsRepository {
       today.updatedAt = DateTime.now();
       await _isar.dailyReadingStats.put(today);
     });
+    notifyStatsChanged();
   }
 
   @override
@@ -193,6 +293,7 @@ class IsarReadingStatsRepository implements ReadingStatsRepository {
       await _isar.dailyReadingStats.put(today);
     });
 
+    notifyStatsChanged();
     return justReachedGoal;
   }
 
@@ -214,6 +315,8 @@ class IsarReadingStatsRepository implements ReadingStatsRepository {
       today.updatedAt = DateTime.now();
       await _isar.dailyReadingStats.put(today);
     });
+
+    notifyStatsChanged();
   }
 
   @override
@@ -253,82 +356,45 @@ class IsarReadingStatsRepository implements ReadingStatsRepository {
   Future<ReadingStreakSummary> getStreakSummary() async {
     final allStats = await getAllStats();
     final today = await getOrCreateTodayStat();
-
-    int totalSeconds = 0;
-    int totalPages = 0;
-    final Set<String> activeDates = {};
-
-    for (final s in allStats) {
-      totalSeconds += s.activeSeconds;
-      totalPages += s.pagesRead;
-      if (s.activeSeconds >= 30 || s.pagesRead > 0) {
-        activeDates.add(s.date);
-      }
-    }
-
-    final now = DateTime.now();
-    final todayStr = formatDate(now);
-    final yesterdayStr = formatDate(now.subtract(const Duration(days: 1)));
-
-    // Calculate current streak
-    int currentStreak = 0;
-    DateTime checkDate;
-
-    if (activeDates.contains(todayStr)) {
-      currentStreak = 1;
-      checkDate = now.subtract(const Duration(days: 1));
-      while (activeDates.contains(formatDate(checkDate))) {
-        currentStreak++;
-        checkDate = checkDate.subtract(const Duration(days: 1));
-      }
-    } else if (activeDates.contains(yesterdayStr)) {
-      currentStreak = 1;
-      checkDate = now.subtract(const Duration(days: 2));
-      while (activeDates.contains(formatDate(checkDate))) {
-        currentStreak++;
-        checkDate = checkDate.subtract(const Duration(days: 1));
-      }
-    } else {
-      currentStreak = 0;
-    }
-
-    // Calculate longest streak across history
-    int longestStreak = currentStreak;
-    if (activeDates.isNotEmpty) {
-      final sortedDates = activeDates.toList()..sort();
-      int tempStreak = 0;
-      DateTime? previousDate;
-
-      for (final dStr in sortedDates) {
-        final d = parseDate(dStr);
-        if (previousDate == null) {
-          tempStreak = 1;
-        } else {
-          final diffDays = d.difference(previousDate).inDays;
-          if (diffDays == 1) {
-            tempStreak++;
-          } else {
-            tempStreak = 1;
-          }
-        }
-        previousDate = d;
-        if (tempStreak > longestStreak) {
-          longestStreak = tempStreak;
-        }
-      }
-    }
-
-    return ReadingStreakSummary(
-      currentStreak: currentStreak,
-      longestStreak: longestStreak,
-      totalDaysRead: activeDates.length,
-      totalReadingSeconds: totalSeconds,
-      totalPagesRead: totalPages,
-      todaySeconds: today.activeSeconds,
-      todayPages: today.pagesRead,
-      todayGoalMinutes: today.goalMinutes,
-      isTodayGoalMet: today.isGoalMet,
+    return ReadingStatsRepository.calculateStreakSummary(
+      allStats: allStats,
+      today: today,
     );
+  }
+
+  @override
+  Stream<ReadingStreakSummary> watchStreakSummary() {
+    late StreamController<ReadingStreakSummary> controller;
+    StreamSubscription? isarSub;
+    StreamSubscription? changeSub;
+
+    Future<void> emitLatest() async {
+      if (controller.isClosed) return;
+      try {
+        final summary = await getStreakSummary();
+        if (!controller.isClosed) {
+          controller.add(summary);
+        }
+      } catch (_) {}
+    }
+
+    controller = StreamController<ReadingStreakSummary>.broadcast(
+      onListen: () {
+        emitLatest();
+        isarSub = _isar.dailyReadingStats.watchLazy().listen((_) {
+          emitLatest();
+        });
+        changeSub = _statsChangeController.stream.listen((_) {
+          emitLatest();
+        });
+      },
+      onCancel: () {
+        isarSub?.cancel();
+        changeSub?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 
   @override
@@ -345,6 +411,14 @@ class IsarReadingStatsRepository implements ReadingStatsRepository {
 class InMemoryReadingStatsRepository implements ReadingStatsRepository {
   final Map<String, DailyReadingStat> _stats = {};
   int _dailyGoal = 30;
+  final StreamController<void> _changeController = StreamController<void>.broadcast();
+
+  @override
+  void notifyStatsChanged() {
+    if (!_changeController.isClosed) {
+      _changeController.add(null);
+    }
+  }
 
   @override
   Future<DailyReadingStat?> getStatForDate(String dateStr) async => _stats[dateStr];
@@ -358,6 +432,7 @@ class InMemoryReadingStatsRepository implements ReadingStatsRepository {
     final today = await getOrCreateTodayStat();
     today.goalMinutes = minutes;
     today.isGoalMet = today.activeSeconds >= minutes * 60;
+    notifyStatsChanged();
   }
 
   @override
@@ -391,8 +466,10 @@ class InMemoryReadingStatsRepository implements ReadingStatsRepository {
     if (today.activeSeconds >= today.goalMinutes * 60) {
       today.isGoalMet = true;
       today.goalMetAt ??= DateTime.now();
+      notifyStatsChanged();
       return !wasMet;
     }
+    notifyStatsChanged();
     return false;
   }
 
@@ -401,6 +478,7 @@ class InMemoryReadingStatsRepository implements ReadingStatsRepository {
     final today = await getOrCreateTodayStat();
     today.pagesRead += pages;
     if (!today.bookIds.contains(bookId)) today.bookIds.add(bookId);
+    notifyStatsChanged();
   }
 
   @override
@@ -422,19 +500,41 @@ class InMemoryReadingStatsRepository implements ReadingStatsRepository {
   @override
   Future<ReadingStreakSummary> getStreakSummary() async {
     final today = await getOrCreateTodayStat();
-    return ReadingStreakSummary(
-      currentStreak: today.activeSeconds > 0 ? 1 : 0,
-      longestStreak: today.activeSeconds > 0 ? 1 : 0,
-      totalDaysRead: today.activeSeconds > 0 ? 1 : 0,
-      totalReadingSeconds: today.activeSeconds,
-      totalPagesRead: today.pagesRead,
-      todaySeconds: today.activeSeconds,
-      todayPages: today.pagesRead,
-      todayGoalMinutes: today.goalMinutes,
-      isTodayGoalMet: today.isGoalMet,
+    return ReadingStatsRepository.calculateStreakSummary(
+      allStats: _stats.values.toList(),
+      today: today,
     );
   }
 
   @override
-  Stream<DailyReadingStat?> watchTodayStat() => Stream.value(_stats[IsarReadingStatsRepository.formatDate(DateTime.now())]);
+  Stream<DailyReadingStat?> watchTodayStat() =>
+      Stream.value(_stats[IsarReadingStatsRepository.formatDate(DateTime.now())]);
+
+  @override
+  Stream<ReadingStreakSummary> watchStreakSummary() {
+    late StreamController<ReadingStreakSummary> controller;
+    StreamSubscription? sub;
+
+    Future<void> emitLatest() async {
+      if (controller.isClosed) return;
+      try {
+        final summary = await getStreakSummary();
+        if (!controller.isClosed) {
+          controller.add(summary);
+        }
+      } catch (_) {}
+    }
+
+    controller = StreamController<ReadingStreakSummary>.broadcast(
+      onListen: () {
+        emitLatest();
+        sub = _changeController.stream.listen((_) => emitLatest());
+      },
+      onCancel: () {
+        sub?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
 }
