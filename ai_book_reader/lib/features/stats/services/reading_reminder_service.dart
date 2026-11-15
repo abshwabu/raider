@@ -21,10 +21,10 @@ class ReadingReminderService {
   static const String keyEndHour = 'reading_reminder_end_hour';
 
   // Flutter-native sync keys used by background Android receiver
-  static const String keyNativeGoalMet = 'flutter.reading_goal_met_today';
-  static const String keyNativeMinutesRead = 'flutter.reading_minutes_today';
-  static const String keyNativeGoalMinutes = 'flutter.reading_goal_minutes';
-  static const String keyNativeStatDate = 'flutter.reading_stat_date';
+  static const String keyNativeGoalMet = 'reading_goal_met_today';
+  static const String keyNativeMinutesRead = 'reading_minutes_today';
+  static const String keyNativeGoalMinutes = 'reading_goal_minutes';
+  static const String keyNativeStatDate = 'reading_stat_date';
 
   ReadingReminderService(this._prefs);
 

@@ -63,6 +63,19 @@ class MainActivity : FlutterActivity() {
         rChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "scheduleHourlyReminder" -> {
+                    val goalMinutes = call.argument<Int>("goalMinutes")
+                    val currentMinutes = call.argument<Int>("currentMinutes")
+                    val isGoalMet = call.argument<Boolean>("isGoalMet")
+                    if (goalMinutes != null && currentMinutes != null && isGoalMet != null) {
+                        ReadingReminderManager.saveGoalStatus(
+                            context = this,
+                            isGoalMet = isGoalMet,
+                            currentMinutes = currentMinutes,
+                            goalMinutes = goalMinutes,
+                            statDate = ReadingReminderManager.getTodayDateString(),
+                            isEnabled = true
+                        )
+                    }
                     ReadingReminderManager.scheduleHourlyReminder(this)
                     result.success(true)
                 }
@@ -74,7 +87,17 @@ class MainActivity : FlutterActivity() {
                     val isGoalMet = call.argument<Boolean>("isGoalMet") ?: false
                     val currentMinutes = call.argument<Int>("currentMinutes") ?: 0
                     val goalMinutes = call.argument<Int>("goalMinutes") ?: 30
+                    val date = call.argument<String>("date") ?: ReadingReminderManager.getTodayDateString()
                     val enabled = call.argument<Boolean>("enabled") ?: true
+
+                    ReadingReminderManager.saveGoalStatus(
+                        context = this,
+                        isGoalMet = isGoalMet,
+                        currentMinutes = currentMinutes,
+                        goalMinutes = goalMinutes,
+                        statDate = date,
+                        isEnabled = enabled
+                    )
 
                     if (enabled) {
                         if (isGoalMet) {

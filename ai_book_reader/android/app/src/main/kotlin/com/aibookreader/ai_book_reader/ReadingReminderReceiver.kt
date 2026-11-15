@@ -3,6 +3,7 @@ package com.aibookreader.ai_book_reader
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 
 class ReadingReminderReceiver : BroadcastReceiver() {
     companion object {
@@ -11,33 +12,36 @@ class ReadingReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
+        Log.d("ReadingReminder", "ReadingReminderReceiver.onReceive: action=$action")
+
         if (action == ACTION_HOURLY_TICK || action == Intent.ACTION_BOOT_COMPLETED) {
             val prefs = context.getSharedPreferences(ReadingReminderManager.PREFS_NAME, Context.MODE_PRIVATE)
 
-            val isEnabled = prefs.getBoolean("flutter.reading_hourly_reminder_enabled", true)
-            if (!isEnabled) {
-                return
-            }
-
+            val isEnabled = ReadingReminderManager.getStoredIsEnabled(prefs)
             val todayStr = ReadingReminderManager.getTodayDateString()
-            val statDate = prefs.getString("flutter.reading_stat_date", "")
+            val statDate = ReadingReminderManager.getStoredStatDate(prefs)
+            val isGoalMet = ReadingReminderManager.getStoredIsGoalMet(prefs, todayStr)
+            val currentMinutes = ReadingReminderManager.getStoredCurrentMinutes(prefs, todayStr)
+            val goalMinutes = ReadingReminderManager.getStoredGoalMinutes(prefs)
 
-            var isGoalMet = false
-            var currentMinutes = 0
-            val goalMinutes = prefs.getInt("flutter.reading_goal_minutes", 30)
+            Log.d(
+                "ReadingReminder",
+                "Receiver evaluated: isEnabled=$isEnabled, isGoalMet=$isGoalMet, currentMinutes=$currentMinutes, goalMinutes=$goalMinutes, statDate=$statDate, todayStr=$todayStr"
+            )
 
-            if (statDate == todayStr) {
-                isGoalMet = prefs.getBoolean("flutter.reading_goal_met_today", false)
-                currentMinutes = prefs.getInt("flutter.reading_minutes_today", 0)
+            if (!isEnabled) {
+                Log.d("ReadingReminder", "Reminders disabled, exiting.")
+                return
             }
 
             // Only fire reminder if today's goal is NOT yet met
             if (!isGoalMet && currentMinutes < goalMinutes) {
+                Log.d("ReadingReminder", "Posting reminder: $currentMinutes / $goalMinutes mins")
                 ReadingReminderManager.showReminderNotification(context, currentMinutes, goalMinutes)
                 // Reschedule for next hour
                 ReadingReminderManager.scheduleHourlyReminder(context)
             } else {
-                // Goal was met or already exceeded today, no hourly reminder needed today
+                Log.d("ReadingReminder", "Goal already met or exceeded ($currentMinutes >= $goalMinutes), suppressing reminder.")
             }
         }
     }

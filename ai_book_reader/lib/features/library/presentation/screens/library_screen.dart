@@ -8,6 +8,7 @@ import '../../../../data/import/incoming_file_service.dart';
 import '../../../../data/local/book_repository.dart';
 import '../../../../data/local/reading_stats_repository.dart';
 import '../../../../data/models/book.dart';
+import '../../../stats/services/reading_reminder_service.dart';
 import '../widgets/browse_books_sheet.dart';
 
 final streakSummaryProvider = StreamProvider.autoDispose<ReadingStreakSummary>((ref) {
@@ -45,6 +46,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initIncomingFileHandler();
+      _syncGoalToReminder();
     });
   }
 
@@ -53,7 +55,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
     if (state == AppLifecycleState.resumed) {
       ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
       ref.invalidate(streakSummaryProvider);
+      _syncGoalToReminder();
     }
+  }
+
+  Future<void> _syncGoalToReminder() async {
+    try {
+      final statsRepo = ref.read(readingStatsRepositoryProvider);
+      final today = await statsRepo.getOrCreateTodayStat();
+      final reminderService = ref.read(readingReminderServiceProvider);
+      await reminderService.syncGoalStatus(
+        isGoalMet: today.isGoalMet,
+        activeSeconds: today.activeSeconds,
+        goalMinutes: today.goalMinutes,
+      );
+    } catch (_) {}
   }
 
   Future<void> _initIncomingFileHandler() async {

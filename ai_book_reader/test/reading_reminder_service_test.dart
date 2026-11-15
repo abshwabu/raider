@@ -69,6 +69,19 @@ void main() {
       expect(call.arguments['isGoalMet'], isTrue);
       expect(call.arguments['currentMinutes'], equals(30));
       expect(call.arguments['goalMinutes'], equals(30));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(ReadingReminderService.keyNativeGoalMinutes), equals(30));
+
+      // Test changing to 10 min goal
+      await service.syncGoalStatus(
+        isGoalMet: false,
+        activeSeconds: 180,
+        goalMinutes: 10,
+      );
+      expect(prefs.getInt(ReadingReminderService.keyNativeGoalMinutes), equals(10));
+      expect(prefs.getInt(ReadingReminderService.keyNativeMinutesRead), equals(3));
+      expect(prefs.getBool(ReadingReminderService.keyNativeGoalMet), isFalse);
     });
 
     test('sendTestReminder invokes native showTestNotification', () async {
