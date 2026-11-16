@@ -20,26 +20,29 @@ subprojects {
 }
 
 subprojects {
-    val fixNamespace: (Project) -> Unit = { proj ->
+    val fixSubproject: (Project) -> Unit = { proj ->
         if (proj.plugins.hasPlugin("com.android.library")) {
             val androidExtension = proj.extensions.findByName("android") as? com.android.build.gradle.LibraryExtension
-            if (androidExtension != null && androidExtension.namespace == null) {
-                val manifestFile = proj.file("src/main/AndroidManifest.xml")
-                var pkgName: String? = null
-                if (manifestFile.exists()) {
-                    val match = Regex("""package\s*=\s*"([^"]+)"""").find(manifestFile.readText())
-                    if (match != null) {
-                        pkgName = match.groupValues[1]
+            if (androidExtension != null) {
+                if (androidExtension.namespace == null) {
+                    val manifestFile = proj.file("src/main/AndroidManifest.xml")
+                    var pkgName: String? = null
+                    if (manifestFile.exists()) {
+                        val match = Regex("""package\s*=\s*"([^"]+)"""").find(manifestFile.readText())
+                        if (match != null) {
+                            pkgName = match.groupValues[1]
+                        }
                     }
+                    androidExtension.namespace = pkgName ?: "com.example.${proj.name.replace("-", "_")}"
                 }
-                androidExtension.namespace = pkgName ?: "com.example.${proj.name.replace("-", "_")}"
+                androidExtension.compileSdk = 35
             }
         }
     }
     if (state.executed) {
-        fixNamespace(this)
+        fixSubproject(this)
     } else {
-        afterEvaluate { fixNamespace(this) }
+        afterEvaluate { fixSubproject(this) }
     }
 }
 

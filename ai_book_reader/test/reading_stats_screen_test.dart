@@ -129,6 +129,8 @@ void main() {
     // 4. Verify Hourly Reminder Card
     expect(find.text('Hourly Reminder'), findsOneWidget);
     expect(find.text('Remind every hour until goal is met'), findsOneWidget);
+    expect(find.text('Morning Start Time'), findsOneWidget);
+    expect(find.text('8:00 AM'), findsOneWidget);
     expect(find.byType(Switch), findsOneWidget);
     expect(find.text('Send Test Reminder'), findsOneWidget);
 

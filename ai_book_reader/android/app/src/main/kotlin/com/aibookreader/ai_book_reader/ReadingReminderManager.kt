@@ -36,6 +36,95 @@ object ReadingReminderManager {
     }
 
     fun scheduleHourlyReminder(context: Context) {
+        scheduleNextReminder(context)
+    }
+
+    fun scheduleNextReminder(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val isEnabled = getStoredIsEnabled(prefs)
+        if (!isEnabled) {
+            cancelHourlyReminder(context)
+            return
+        }
+
+        val nextTriggerMillis = calculateNextAlarmTime(context) ?: return
+        scheduleAtTime(context, nextTriggerMillis)
+    }
+
+    fun calculateNextAlarmTime(context: Context): Long? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val isEnabled = getStoredIsEnabled(prefs)
+        if (!isEnabled) return null
+
+        val startHour = getStoredStartHour(prefs)
+        val startMinute = getStoredStartMinute(prefs)
+        var endHour = getStoredEndHour(prefs)
+        if (endHour <= startHour) {
+            endHour = 22
+        }
+
+        val todayStr = getTodayDateString()
+        val isGoalMet = getStoredIsGoalMet(prefs, todayStr)
+        val currentMinutes = getStoredCurrentMinutes(prefs, todayStr)
+        val goalMinutes = getStoredGoalMinutes(prefs)
+
+        val now = Calendar.getInstance()
+
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, startHour)
+            set(Calendar.MINUTE, startMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val todayEnd = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, endHour)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val tomorrowStart = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, startHour)
+            set(Calendar.MINUTE, startMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // Case 1: Today's goal is already reached -> schedule for tomorrow morning
+        if (isGoalMet || currentMinutes >= goalMinutes) {
+            Log.d("ReadingReminder", "Today's goal achieved. Next reminder: tomorrow at $startHour:${String.format("%02d", startMinute)}")
+            return tomorrowStart.timeInMillis
+        }
+
+        // Case 2: Now is before today's morning start time (with 1-min tolerance)
+        if (now.timeInMillis < todayStart.timeInMillis - 60_000L) {
+            Log.d("ReadingReminder", "Before morning start time. Next reminder: today at $startHour:${String.format("%02d", startMinute)}")
+            return todayStart.timeInMillis
+        }
+
+        // Case 3: Now is after today's end time (quiet night hours) -> schedule for tomorrow morning
+        if (now.timeInMillis > todayEnd.timeInMillis) {
+            Log.d("ReadingReminder", "Past evening end time. Next reminder: tomorrow at $startHour:${String.format("%02d", startMinute)}")
+            return tomorrowStart.timeInMillis
+        }
+
+        // Case 4: Currently during active daytime hours -> schedule for 1 hour from now
+        val nextHour = Calendar.getInstance().apply {
+            add(Calendar.HOUR_OF_DAY, 1)
+        }
+
+        return if (nextHour.timeInMillis > todayEnd.timeInMillis) {
+            Log.d("ReadingReminder", "Next hour would exceed evening limit. Next reminder: tomorrow at $startHour:${String.format("%02d", startMinute)}")
+            tomorrowStart.timeInMillis
+        } else {
+            Log.d("ReadingReminder", "Scheduling next hourly reminder for: ${nextHour.time}")
+            nextHour.timeInMillis
+        }
+    }
+
+    fun scheduleAtTime(context: Context, triggerAtMillis: Long) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val intent = Intent(context, ReadingReminderReceiver::class.java).apply {
             action = ReadingReminderReceiver.ACTION_HOURLY_TICK
@@ -54,36 +143,33 @@ object ReadingReminderManager {
             flags
         )
 
-        // Schedule next alarm for 1 hour from now
-        val calendar = Calendar.getInstance().apply {
-            add(Calendar.HOUR_OF_DAY, 1)
-        }
+        Log.d("ReadingReminder", "Setting alarm for: ${Date(triggerAtMillis)}")
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (alarmManager.canScheduleExactAlarms()) {
                     alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
+                        triggerAtMillis,
                         pendingIntent
                     )
                 } else {
                     alarmManager.setAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
+                        triggerAtMillis,
                         pendingIntent
                     )
                 }
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
+                    triggerAtMillis,
                     pendingIntent
                 )
             } else {
                 alarmManager.set(
                     AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
+                    triggerAtMillis,
                     pendingIntent
                 )
             }
@@ -93,13 +179,13 @@ object ReadingReminderManager {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     alarmManager.setAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
+                        triggerAtMillis,
                         pendingIntent
                     )
                 } else {
                     alarmManager.set(
                         AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
+                        triggerAtMillis,
                         pendingIntent
                     )
                 }
@@ -219,6 +305,10 @@ object ReadingReminderManager {
         val currentMinutes = getStoredCurrentMinutes(prefs, todayStr)
         val remaining = (goalMinutes - currentMinutes).coerceAtLeast(1)
 
+        val startHour = getStoredStartHour(prefs)
+        val startMinute = getStoredStartMinute(prefs)
+        val formattedTime = formatTime(startHour, startMinute)
+
         val launchIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -231,9 +321,9 @@ object ReadingReminderManager {
 
         val title = "Reading Reminder Active 📖"
         val message = if (currentMinutes > 0) {
-            "Hourly reminders are active! You've read $currentMinutes mins of your $goalMinutes min goal ($remaining mins left)."
+            "Reminders start daily at $formattedTime. You've read $currentMinutes mins today ($remaining mins left to hit your $goalMinutes min goal)."
         } else {
-            "Hourly reminders are active! We'll nudge you every hour until your $goalMinutes min goal is met."
+            "Reminders start automatically at $formattedTime every morning and check hourly until your $goalMinutes min goal is met."
         }
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -366,6 +456,75 @@ object ReadingReminderManager {
             }
         }
         return true
+    }
+
+    fun getStoredStartHour(prefs: android.content.SharedPreferences): Int {
+        val keys = listOf(
+            "reading_reminder_start_hour",
+            "flutter.reading_reminder_start_hour"
+        )
+        for (k in keys) {
+            if (prefs.contains(k)) {
+                return getPrefInt(prefs, k, 8)
+            }
+        }
+        return 8
+    }
+
+    fun getStoredStartMinute(prefs: android.content.SharedPreferences): Int {
+        val keys = listOf(
+            "reading_reminder_start_minute",
+            "flutter.reading_reminder_start_minute"
+        )
+        for (k in keys) {
+            if (prefs.contains(k)) {
+                return getPrefInt(prefs, k, 0)
+            }
+        }
+        return 0
+    }
+
+    fun getStoredEndHour(prefs: android.content.SharedPreferences): Int {
+        val keys = listOf(
+            "reading_reminder_end_hour",
+            "flutter.reading_reminder_end_hour"
+        )
+        for (k in keys) {
+            if (prefs.contains(k)) {
+                return getPrefInt(prefs, k, 21)
+            }
+        }
+        return 21
+    }
+
+    fun formatTime(hour: Int, minute: Int): String {
+        val amPm = if (hour >= 12) "PM" else "AM"
+        val h12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+        return String.format(Locale.getDefault(), "%d:%02d %s", h12, minute, amPm)
+    }
+
+    fun saveReminderSettings(
+        context: Context,
+        isEnabled: Boolean,
+        startHour: Int,
+        startMinute: Int,
+        endHour: Int = 21
+    ) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putBoolean("flutter.reading_hourly_reminder_enabled", isEnabled)
+            putBoolean("reading_hourly_reminder_enabled", isEnabled)
+            putInt("flutter.reading_reminder_start_hour", startHour)
+            putInt("reading_reminder_start_hour", startHour)
+            putLong("flutter.reading_reminder_start_hour", startHour.toLong())
+            putInt("flutter.reading_reminder_start_minute", startMinute)
+            putInt("reading_reminder_start_minute", startMinute)
+            putLong("flutter.reading_reminder_start_minute", startMinute.toLong())
+            putInt("flutter.reading_reminder_end_hour", endHour)
+            putInt("reading_reminder_end_hour", endHour)
+            putLong("flutter.reading_reminder_end_hour", endHour.toLong())
+            apply()
+        }
     }
 
     fun saveGoalStatus(

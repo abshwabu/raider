@@ -18,7 +18,12 @@ class ReadingReminderService {
 
   static const String keyReminderEnabled = 'reading_hourly_reminder_enabled';
   static const String keyStartHour = 'reading_reminder_start_hour';
+  static const String keyStartMinute = 'reading_reminder_start_minute';
   static const String keyEndHour = 'reading_reminder_end_hour';
+
+  static const int defaultStartHour = 8;
+  static const int defaultStartMinute = 0;
+  static const int defaultEndHour = 21;
 
   // Flutter-native sync keys used by background Android receiver
   static const String keyNativeGoalMet = 'reading_goal_met_today';
@@ -40,10 +45,55 @@ class ReadingReminderService {
     return prefs.getBool(keyReminderEnabled) ?? true;
   }
 
+  /// Morning start hour for reminders (0-23, defaults to 8)
+  Future<int> getStartHour() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(keyStartHour) ?? defaultStartHour;
+  }
+
+  /// Morning start minute for reminders (0-59, defaults to 0)
+  Future<int> getStartMinute() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(keyStartMinute) ?? defaultStartMinute;
+  }
+
+  /// Evening end hour for reminders (defaults to 21 / 9 PM)
+  Future<int> getEndHour() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(keyEndHour) ?? defaultEndHour;
+  }
+
+  /// Configure morning start time for reminders (e.g. 8:00 AM)
+  Future<void> setStartTime({required int hour, required int minute}) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(keyStartHour, hour);
+    await prefs.setInt(keyStartMinute, minute);
+
+    final enabled = prefs.getBool(keyReminderEnabled) ?? true;
+    final endHour = prefs.getInt(keyEndHour) ?? defaultEndHour;
+    final isGoalMet = prefs.getBool(keyNativeGoalMet) ?? false;
+    final currentMinutes = prefs.getInt(keyNativeMinutesRead) ?? 0;
+    final goalMinutes = prefs.getInt(keyNativeGoalMinutes) ?? 30;
+
+    await _invokeNative('updateReminderSettings', {
+      'enabled': enabled,
+      'startHour': hour,
+      'startMinute': minute,
+      'endHour': endHour,
+      'isGoalMet': isGoalMet,
+      'currentMinutes': currentMinutes,
+      'goalMinutes': goalMinutes,
+    });
+  }
+
   /// Toggle or update hourly reminders
   Future<void> setEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(keyReminderEnabled, enabled);
+
+    final startHour = prefs.getInt(keyStartHour) ?? defaultStartHour;
+    final startMinute = prefs.getInt(keyStartMinute) ?? defaultStartMinute;
+    final endHour = prefs.getInt(keyEndHour) ?? defaultEndHour;
 
     if (enabled) {
       final isGoalMet = prefs.getBool(keyNativeGoalMet) ?? false;
@@ -54,6 +104,9 @@ class ReadingReminderService {
         'isGoalMet': isGoalMet,
         'currentMinutes': minutesRead,
         'goalMinutes': goalMinutes,
+        'startHour': startHour,
+        'startMinute': startMinute,
+        'endHour': endHour,
       });
     } else {
       await _invokeNative('cancelHourlyReminder', {});
@@ -76,6 +129,9 @@ class ReadingReminderService {
     await prefs.setString(keyNativeStatDate, todayStr);
 
     final enabled = prefs.getBool(keyReminderEnabled) ?? true;
+    final startHour = prefs.getInt(keyStartHour) ?? defaultStartHour;
+    final startMinute = prefs.getInt(keyStartMinute) ?? defaultStartMinute;
+    final endHour = prefs.getInt(keyEndHour) ?? defaultEndHour;
 
     await _invokeNative('updateGoalStatus', {
       'isGoalMet': isGoalMet,
@@ -83,6 +139,9 @@ class ReadingReminderService {
       'goalMinutes': goalMinutes,
       'date': todayStr,
       'enabled': enabled,
+      'startHour': startHour,
+      'startMinute': startMinute,
+      'endHour': endHour,
     });
   }
 

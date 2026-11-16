@@ -37,6 +37,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ReadingReminderManager.createNotificationChannel(this)
+        ReadingReminderManager.scheduleNextReminder(this)
         handleIntent(intent)
     }
 
@@ -71,6 +72,23 @@ class MainActivity : FlutterActivity() {
                     val goalMinutes = call.argument<Int>("goalMinutes")
                     val currentMinutes = call.argument<Int>("currentMinutes")
                     val isGoalMet = call.argument<Boolean>("isGoalMet")
+                    val startHour = call.argument<Int>("startHour")
+                    val startMinute = call.argument<Int>("startMinute")
+                    val endHour = call.argument<Int>("endHour")
+
+                    val prefs = getSharedPreferences(ReadingReminderManager.PREFS_NAME, Context.MODE_PRIVATE)
+                    val sHour = startHour ?: ReadingReminderManager.getStoredStartHour(prefs)
+                    val sMinute = startMinute ?: ReadingReminderManager.getStoredStartMinute(prefs)
+                    val eHour = endHour ?: ReadingReminderManager.getStoredEndHour(prefs)
+
+                    ReadingReminderManager.saveReminderSettings(
+                        context = this,
+                        isEnabled = true,
+                        startHour = sHour,
+                        startMinute = sMinute,
+                        endHour = eHour
+                    )
+
                     if (goalMinutes != null && currentMinutes != null && isGoalMet != null) {
                         ReadingReminderManager.saveGoalStatus(
                             context = this,
@@ -81,11 +99,57 @@ class MainActivity : FlutterActivity() {
                             isEnabled = true
                         )
                     }
-                    ReadingReminderManager.scheduleHourlyReminder(this)
+                    ReadingReminderManager.scheduleNextReminder(this)
                     result.success(true)
                 }
                 "cancelHourlyReminder" -> {
+                    val prefs = getSharedPreferences(ReadingReminderManager.PREFS_NAME, Context.MODE_PRIVATE)
+                    val sHour = ReadingReminderManager.getStoredStartHour(prefs)
+                    val sMinute = ReadingReminderManager.getStoredStartMinute(prefs)
+                    val eHour = ReadingReminderManager.getStoredEndHour(prefs)
+                    ReadingReminderManager.saveReminderSettings(
+                        context = this,
+                        isEnabled = false,
+                        startHour = sHour,
+                        startMinute = sMinute,
+                        endHour = eHour
+                    )
                     ReadingReminderManager.cancelHourlyReminder(this)
+                    result.success(true)
+                }
+                "updateReminderSettings" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: true
+                    val startHour = call.argument<Int>("startHour") ?: 8
+                    val startMinute = call.argument<Int>("startMinute") ?: 0
+                    val endHour = call.argument<Int>("endHour") ?: 21
+
+                    ReadingReminderManager.saveReminderSettings(
+                        context = this,
+                        isEnabled = enabled,
+                        startHour = startHour,
+                        startMinute = startMinute,
+                        endHour = endHour
+                    )
+
+                    val goalMinutes = call.argument<Int>("goalMinutes")
+                    val currentMinutes = call.argument<Int>("currentMinutes")
+                    val isGoalMet = call.argument<Boolean>("isGoalMet")
+                    if (goalMinutes != null && currentMinutes != null && isGoalMet != null) {
+                        ReadingReminderManager.saveGoalStatus(
+                            context = this,
+                            isGoalMet = isGoalMet,
+                            currentMinutes = currentMinutes,
+                            goalMinutes = goalMinutes,
+                            statDate = ReadingReminderManager.getTodayDateString(),
+                            isEnabled = enabled
+                        )
+                    }
+
+                    if (enabled) {
+                        ReadingReminderManager.scheduleNextReminder(this)
+                    } else {
+                        ReadingReminderManager.cancelHourlyReminder(this)
+                    }
                     result.success(true)
                 }
                 "updateGoalStatus" -> {
@@ -94,6 +158,19 @@ class MainActivity : FlutterActivity() {
                     val goalMinutes = call.argument<Int>("goalMinutes") ?: 30
                     val date = call.argument<String>("date") ?: ReadingReminderManager.getTodayDateString()
                     val enabled = call.argument<Boolean>("enabled") ?: true
+                    val startHour = call.argument<Int>("startHour")
+                    val startMinute = call.argument<Int>("startMinute")
+                    val endHour = call.argument<Int>("endHour")
+
+                    if (startHour != null && startMinute != null) {
+                        ReadingReminderManager.saveReminderSettings(
+                            context = this,
+                            isEnabled = enabled,
+                            startHour = startHour,
+                            startMinute = startMinute,
+                            endHour = endHour ?: 21
+                        )
+                    }
 
                     ReadingReminderManager.saveGoalStatus(
                         context = this,
@@ -105,11 +182,7 @@ class MainActivity : FlutterActivity() {
                     )
 
                     if (enabled) {
-                        if (isGoalMet) {
-                            ReadingReminderManager.cancelHourlyReminder(this)
-                        } else {
-                            ReadingReminderManager.scheduleHourlyReminder(this)
-                        }
+                        ReadingReminderManager.scheduleNextReminder(this)
                     } else {
                         ReadingReminderManager.cancelHourlyReminder(this)
                     }

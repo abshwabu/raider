@@ -27,6 +27,7 @@ void main() {
             case 'scheduleHourlyReminder':
             case 'cancelHourlyReminder':
             case 'updateGoalStatus':
+            case 'updateReminderSettings':
             case 'showTestNotification':
             case 'checkNotificationPermission':
             case 'requestNotificationPermission':
@@ -88,6 +89,24 @@ void main() {
       final res = await service.sendTestReminder();
       expect(res, isTrue);
       expect(channelCalls.any((c) => c.method == 'showTestNotification'), isTrue);
+    });
+
+    test('morning reminder start time defaults to 8:00 AM and can be changed', () async {
+      expect(await service.getStartHour(), equals(8));
+      expect(await service.getStartMinute(), equals(0));
+
+      await service.setStartTime(hour: 7, minute: 30);
+      expect(await service.getStartHour(), equals(7));
+      expect(await service.getStartMinute(), equals(30));
+
+      final call = channelCalls.firstWhere((c) => c.method == 'updateReminderSettings');
+      expect(call.arguments['startHour'], equals(7));
+      expect(call.arguments['startMinute'], equals(30));
+      expect(call.arguments['enabled'], isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(ReadingReminderService.keyStartHour), equals(7));
+      expect(prefs.getInt(ReadingReminderService.keyStartMinute), equals(30));
     });
   });
 }

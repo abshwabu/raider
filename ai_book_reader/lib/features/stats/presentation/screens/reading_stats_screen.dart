@@ -17,6 +17,8 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
   ReadingStreakSummary? _summary;
   List<DailyReadingStat> _recentStats = [];
   bool _hourlyReminderEnabled = true;
+  int _startHour = 8;
+  int _startMinute = 0;
   bool _hasNotificationPermission = true;
 
   @override
@@ -33,6 +35,8 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
       final summary = await statsRepo.getStreakSummary();
       final recent = await statsRepo.getRecentStats(days: 7);
       final enabled = await reminderService.isEnabled();
+      final startHour = await reminderService.getStartHour();
+      final startMinute = await reminderService.getStartMinute();
       final hasPerm = await reminderService.hasNotificationPermission();
 
       if (mounted) {
@@ -40,6 +44,8 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
           _summary = summary;
           _recentStats = recent;
           _hourlyReminderEnabled = enabled;
+          _startHour = startHour;
+          _startMinute = startMinute;
           _hasNotificationPermission = hasPerm;
           _isLoading = false;
         });
@@ -67,16 +73,48 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
     }
 
     if (mounted) {
+      final timeStr = TimeOfDay(hour: _startHour, minute: _startMinute).format(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             value
-                ? 'Hourly reminder enabled until goal is met'
-                : 'Hourly reminder disabled',
+                ? 'Reminders enabled (starting daily at $timeStr)'
+                : 'Daily reminders disabled',
           ),
           duration: const Duration(seconds: 2),
         ),
       );
+    }
+  }
+
+  Future<void> _changeStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _startHour, minute: _startMinute),
+      helpText: 'SELECT MORNING REMINDER TIME',
+    );
+
+    if (picked != null) {
+      final reminderService = ref.read(readingReminderServiceProvider);
+      await reminderService.setStartTime(
+        hour: picked.hour,
+        minute: picked.minute,
+      );
+
+      if (mounted) {
+        setState(() {
+          _startHour = picked.hour;
+          _startMinute = picked.minute;
+        });
+
+        final formatted = picked.format(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reminders will start automatically at $formatted every day'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -512,6 +550,9 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
   }
 
   Widget _buildReminderCard(ThemeData theme) {
+    final timeOfDay = TimeOfDay(hour: _startHour, minute: _startMinute);
+    final formattedStartTime = timeOfDay.format(context);
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -560,9 +601,96 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
+
+            // Morning Start Time Selector Tile
+            InkWell(
+              onTap: _hourlyReminderEnabled ? _changeStartTime : null,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: _hourlyReminderEnabled
+                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                      : Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _hourlyReminderEnabled
+                        ? theme.colorScheme.outlineVariant.withValues(alpha: 0.5)
+                        : Colors.grey.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.wb_sunny_rounded,
+                      color: _hourlyReminderEnabled
+                          ? Colors.amber.shade700
+                          : Colors.grey,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Morning Start Time',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: _hourlyReminderEnabled
+                                  ? theme.textTheme.bodyMedium?.color
+                                  : Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            'Automatic first reminder of the day',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _hourlyReminderEnabled
+                            ? theme.colorScheme.primary
+                            : Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            formattedStartTime,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.edit_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
             Text(
-              'When enabled, Raider automatically checks your reading progress and sends a notification every hour until you reach your daily reading goal. Once completed, reminders stop for the day.',
+              'When enabled, Raider automatically starts checking your reading progress at $formattedStartTime every morning and sends reminders every hour until you reach your daily reading goal. Once completed, reminders stop for the day.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.grey.shade600,
                 height: 1.4,
