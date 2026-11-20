@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ai_book_reader/data/models/book.dart';
 import 'package:ai_book_reader/data/local/book_repository.dart';
+import 'package:ai_book_reader/data/local/ai_settings_service.dart';
 import 'package:ai_book_reader/features/library/presentation/screens/library_screen.dart';
 
 class FakeBookRepository extends Fake implements BookRepository {
@@ -164,5 +166,175 @@ void main() {
     expect(find.text('Book To Delete'), findsNothing);
     expect(fakeBookRepo.deletedIds, contains(1));
     expect(await fakeBookRepo.getBook(1), isNull);
+  });
+
+  testWidgets('Can toggle between grid and list view with the switch button', (WidgetTester tester) async {
+    final book1 = Book()
+      ..id = 1
+      ..title = 'Alpha PDF'
+      ..author = 'Author Alpha'
+      ..format = 'pdf'
+      ..filePath = '/fake/alpha.pdf'
+      ..addedAt = DateTime.now()
+      ..readingProgress = 0.45;
+
+    await fakeBookRepo.addBook(book1);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => Stream.value([book1])),
+        ],
+        child: const MaterialApp(
+          home: LibraryScreen(),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    // Defaults to grid view
+    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
+
+    // Button icon indicates switching to list view
+    final switchButtonFinder = find.byKey(const Key('switch_view_mode_button'));
+    expect(switchButtonFinder, findsOneWidget);
+    expect(find.byIcon(Icons.view_list_rounded), findsOneWidget);
+    expect(find.byTooltip('Switch to list view'), findsOneWidget);
+
+    // Tap the switch button to change to list view
+    await tester.tap(switchButtonFinder);
+    await tester.pumpAndSettle();
+
+    // Now in list view
+    expect(find.byType(GridView), findsNothing);
+    expect(find.byType(ListView), findsOneWidget);
+
+    // Button icon now indicates switching to grid view
+    expect(find.byIcon(Icons.grid_view_rounded), findsOneWidget);
+    expect(find.byTooltip('Switch to grid view'), findsOneWidget);
+
+    // Book details are visible in list view
+    expect(find.text('Alpha PDF'), findsOneWidget);
+    expect(find.text('Author Alpha'), findsOneWidget);
+    expect(find.text('PDF'), findsOneWidget);
+    expect(find.text('45%'), findsOneWidget);
+
+    // Tap again to switch back to grid view
+    await tester.tap(switchButtonFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
+    expect(find.byIcon(Icons.view_list_rounded), findsOneWidget);
+  });
+
+  testWidgets('Deleting a book removes it from list view after confirmation', (WidgetTester tester) async {
+    final book = Book()
+      ..id = 10
+      ..title = 'Book To Delete in List'
+      ..format = 'epub'
+      ..filePath = '/fake/delete_in_list.epub'
+      ..addedAt = DateTime.now();
+
+    await fakeBookRepo.addBook(book);
+
+    final controller = StreamController<List<Book>>();
+    controller.add([book]);
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => controller.stream),
+        ],
+        child: const MaterialApp(
+          home: LibraryScreen(),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    // Switch to list view
+    await tester.tap(find.byKey(const Key('switch_view_mode_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListView), findsOneWidget);
+    expect(find.text('Book To Delete in List'), findsOneWidget);
+
+    // Open options menu in list item
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    // Tap Delete
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    // Dialog appears
+    expect(find.text('Delete Book'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    // Simulate stream update
+    controller.add([]);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Book To Delete in List'), findsNothing);
+    expect(fakeBookRepo.deletedIds, contains(10));
+    expect(await fakeBookRepo.getBook(10), isNull);
+  });
+
+  testWidgets('Persists view mode choice in SharedPreferences when available', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'library_view_mode': 'grid'});
+    final prefs = await SharedPreferences.getInstance();
+
+    final book = Book()
+      ..id = 1
+      ..title = 'Sample Book'
+      ..format = 'txt'
+      ..filePath = '/fake/sample.txt'
+      ..addedAt = DateTime.now();
+
+    await fakeBookRepo.addBook(book);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          bookRepositoryProvider.overrideWithValue(fakeBookRepo),
+          booksStreamProvider.overrideWith((ref) => Stream.value([book])),
+        ],
+        child: const MaterialApp(
+          home: LibraryScreen(),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump();
+
+    // Initially grid
+    expect(find.byType(GridView), findsOneWidget);
+
+    // Switch to list
+    await tester.tap(find.byKey(const Key('switch_view_mode_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ListView), findsOneWidget);
+    expect(prefs.getString('library_view_mode'), 'list');
+
+    // Switch back to grid
+    await tester.tap(find.byKey(const Key('switch_view_mode_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GridView), findsOneWidget);
+    expect(prefs.getString('library_view_mode'), 'grid');
   });
 }

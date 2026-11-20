@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../data/import/import_service.dart';
 import '../../../../data/import/incoming_file_service.dart';
+import '../../../../data/local/ai_settings_service.dart';
 import '../../../../data/local/book_repository.dart';
 import '../../../../data/local/reading_stats_repository.dart';
 import '../../../../data/models/book.dart';
@@ -24,6 +26,39 @@ enum BookSortOption {
   final String label;
   const BookSortOption(this.label);
 }
+
+enum LibraryViewMode {
+  grid,
+  list,
+}
+
+class LibraryViewModeNotifier extends StateNotifier<LibraryViewMode> {
+  final SharedPreferences? _prefs;
+  static const String _key = 'library_view_mode';
+
+  LibraryViewModeNotifier(this._prefs)
+      : super(_prefs?.getString(_key) == 'list'
+            ? LibraryViewMode.list
+            : LibraryViewMode.grid);
+
+  void toggle() {
+    state = state == LibraryViewMode.grid
+        ? LibraryViewMode.list
+        : LibraryViewMode.grid;
+    _prefs?.setString(_key, state.name);
+  }
+
+  void setViewMode(LibraryViewMode mode) {
+    state = mode;
+    _prefs?.setString(_key, mode.name);
+  }
+}
+
+final libraryViewModeProvider =
+    StateNotifierProvider<LibraryViewModeNotifier, LibraryViewMode>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return LibraryViewModeNotifier(prefs);
+});
 
 final sortOptionProvider = StateProvider<BookSortOption>((ref) => BookSortOption.recentlyAdded);
 final searchQueryProvider = StateProvider<String>((ref) => '');
@@ -477,6 +512,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
     final booksAsync = ref.watch(booksStreamProvider);
     final sortOption = ref.watch(sortOptionProvider);
     final searchQuery = ref.watch(searchQueryProvider);
+    final viewMode = ref.watch(libraryViewModeProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -494,6 +530,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
               )
             : const Text('My Library'),
         actions: [
+          IconButton(
+            key: const Key('switch_view_mode_button'),
+            icon: Icon(
+              viewMode == LibraryViewMode.grid
+                  ? Icons.view_list_rounded
+                  : Icons.grid_view_rounded,
+            ),
+            tooltip: viewMode == LibraryViewMode.grid
+                ? 'Switch to list view'
+                : 'Switch to grid view',
+            onPressed: () {
+              ref.read(libraryViewModeProvider.notifier).toggle();
+            },
+          ),
           if (_isSearching)
             IconButton(
               icon: const Icon(Icons.close),
@@ -608,7 +658,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
                   );
                 }
 
-                return _buildBookGrid(context, displayBooks, theme);
+                return viewMode == LibraryViewMode.grid
+                    ? _buildBookGrid(context, displayBooks, theme)
+                    : _buildBookList(context, displayBooks, theme);
               },
             ),
           ),
@@ -809,7 +861,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
         childAspectRatio: 0.62,
@@ -832,6 +884,94 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
         );
       },
     );
+  }
+
+  Widget _buildBookList(BuildContext context, List<Book> books, ThemeData theme) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final horizontalPadding = screenWidth > 800 ? (screenWidth - 760) / 2 : 16.0;
+
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 12, horizontalPadding, 88),
+      itemCount: books.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final book = books[index];
+        return _BookListItem(
+          book: book,
+          onTap: () async {
+            await context.push('/reader/${book.id}');
+            if (mounted) {
+              ref.read(readingStatsRepositoryProvider).notifyStatsChanged();
+              ref.invalidate(streakSummaryProvider);
+            }
+          },
+          onDelete: () => _confirmDeleteBook(book),
+        );
+      },
+    );
+  }
+}
+
+Color _getFormatColor(String format) {
+  switch (format.toLowerCase()) {
+    case 'pdf':
+      return Colors.red.shade700;
+    case 'epub':
+      return Colors.indigo.shade700;
+    case 'txt':
+      return Colors.teal.shade700;
+    case 'docx':
+      return Colors.blue.shade700;
+    case 'cbz':
+    case 'cbr':
+      return Colors.orange.shade800;
+    case 'mobi':
+    case 'azw3':
+      return Colors.deepPurple.shade700;
+    default:
+      return Colors.blueGrey.shade700;
+  }
+}
+
+List<Color> _getFormatGradient(String format) {
+  switch (format.toLowerCase()) {
+    case 'pdf':
+      return [const Color(0xFF8B0000), const Color(0xFFD32F2F)];
+    case 'epub':
+      return [const Color(0xFF4A148C), const Color(0xFF7B1FA2)];
+    case 'txt':
+      return [const Color(0xFF004D40), const Color(0xFF00796B)];
+    case 'docx':
+      return [const Color(0xFF1565C0), const Color(0xFF1E88E5)];
+    case 'cbz':
+    case 'cbr':
+      return [const Color(0xFFD84315), const Color(0xFFF4511E)];
+    case 'mobi':
+    case 'azw3':
+      return [const Color(0xFF4527A0), const Color(0xFF5E35B1)];
+    default:
+      return [const Color(0xFF263238), const Color(0xFF455A64)];
+  }
+}
+
+IconData _getFormatIcon(String format) {
+  switch (format.toLowerCase()) {
+    case 'pdf':
+      return Icons.picture_as_pdf_rounded;
+    case 'epub':
+      return Icons.menu_book_rounded;
+    case 'txt':
+      return Icons.article_rounded;
+    case 'docx':
+      return Icons.description_rounded;
+    case 'cbz':
+    case 'cbr':
+      return Icons.photo_library_rounded;
+    case 'mobi':
+    case 'azw3':
+      return Icons.auto_stories_rounded;
+    default:
+      return Icons.book_rounded;
   }
 }
 
@@ -1000,37 +1140,9 @@ class _BookCard extends StatelessWidget {
     );
   }
 
-  Color _getFormatColor(String format) {
-    switch (format.toLowerCase()) {
-      case 'pdf':
-        return Colors.red.shade700;
-      case 'epub':
-        return Colors.indigo.shade700;
-      case 'txt':
-        return Colors.teal.shade700;
-      default:
-        return Colors.blueGrey.shade700;
-    }
-  }
-
   Widget _buildGeneratedCover(ThemeData theme) {
     final format = book.format.toLowerCase();
-    List<Color> gradientColors;
-
-    switch (format) {
-      case 'pdf':
-        gradientColors = [const Color(0xFF8B0000), const Color(0xFFD32F2F)];
-        break;
-      case 'epub':
-        gradientColors = [const Color(0xFF4A148C), const Color(0xFF7B1FA2)];
-        break;
-      case 'txt':
-        gradientColors = [const Color(0xFF004D40), const Color(0xFF00796B)];
-        break;
-      default:
-        gradientColors = [const Color(0xFF263238), const Color(0xFF455A64)];
-        break;
-    }
+    final gradientColors = _getFormatGradient(format);
 
     return Container(
       decoration: BoxDecoration(
@@ -1066,17 +1178,179 @@ class _BookCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  IconData _getFormatIcon(String format) {
-    switch (format.toLowerCase()) {
-      case 'pdf':
-        return Icons.picture_as_pdf_rounded;
-      case 'epub':
-        return Icons.menu_book_rounded;
-      case 'txt':
-        return Icons.article_rounded;
-      default:
-        return Icons.book_rounded;
-    }
+class _BookListItem extends StatelessWidget {
+  final Book book;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _BookListItem({
+    required this.book,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasCover = book.coverImagePath != null && File(book.coverImagePath!).existsSync();
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onDelete,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 52,
+                  height: 72,
+                  child: hasCover
+                      ? Image.file(
+                          File(book.coverImagePath!),
+                          fit: BoxFit.cover,
+                        )
+                      : _buildListCover(theme),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _getFormatColor(book.format).withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            book.format.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        if (book.author != null && book.author!.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              book.author!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      book.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: book.readingProgress.clamp(0.0, 1.0),
+                              minHeight: 4,
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          book.readingProgress > 0
+                              ? '${(book.readingProgress * 100).toInt()}%'
+                              : 'Unread',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'Book options',
+                onSelected: (value) {
+                  if (value == 'delete') {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                        SizedBox(width: 8),
+                        Text('Delete', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListCover(ThemeData theme) {
+    final format = book.format.toLowerCase();
+    final gradientColors = _getFormatGradient(format);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradientColors,
+        ),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Center(
+        child: Icon(
+          _getFormatIcon(format),
+          size: 26,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ),
+    );
   }
 }
