@@ -5,6 +5,27 @@ import '../../../../data/local/reading_stats_repository.dart';
 import '../../../../data/models/daily_reading_stat.dart';
 import '../../services/reading_reminder_service.dart';
 
+/// Diagonal line pattern painter for the streak hero card overlay.
+class _DiagonalPatternPainter extends CustomPainter {
+  const _DiagonalPatternPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.06)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    const spacing = 18.0;
+    for (double i = -size.height; i < size.width + size.height; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i + size.height, size.height), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class ReadingStatsScreen extends ConsumerStatefulWidget {
   const ReadingStatsScreen({super.key});
 
@@ -12,7 +33,8 @@ class ReadingStatsScreen extends ConsumerStatefulWidget {
   ConsumerState<ReadingStatsScreen> createState() => _ReadingStatsScreenState();
 }
 
-class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
+class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   ReadingStreakSummary? _summary;
   List<DailyReadingStat> _recentStats = [];
@@ -21,10 +43,22 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
   int _startMinute = 0;
   bool _hasNotificationPermission = true;
 
+  late final AnimationController _glowController;
+
   @override
   void initState() {
     super.initState();
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
     _loadStatsAndPreferences();
+  }
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadStatsAndPreferences() async {
@@ -123,7 +157,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
     final currentGoal = _summary?.todayGoalMinutes ?? 30;
     int selectedGoal = currentGoal;
 
-    final goals = [10, 15, 20, 30, 45, 60, 90, 120];
+    const goals = [10, 15, 20, 30, 45, 60, 90, 120];
 
     final chosen = await showModalBottomSheet<int>(
       context: context,
@@ -133,6 +167,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            final sheetTheme = Theme.of(context);
             return SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -145,7 +180,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                       children: [
                         Text(
                           'Daily Reading Goal',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          style: sheetTheme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
@@ -158,8 +193,8 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Choose how many minutes you want to read each day:',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey.shade600,
+                      style: sheetTheme.textTheme.bodyMedium?.copyWith(
+                            color: sheetTheme.colorScheme.onSurfaceVariant,
                           ),
                     ),
                     const SizedBox(height: 16),
@@ -171,7 +206,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                         return ChoiceChip(
                           label: Text('$mins mins'),
                           selected: isSelected,
-                          selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                          selectedColor: sheetTheme.colorScheme.primaryContainer,
                           onSelected: (val) {
                             if (val) {
                               setModalState(() => selectedGoal = mins);
@@ -275,45 +310,50 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
     final isMet = summary.isTodayGoalMet;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reading Goals & Stats'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_active_outlined),
-            tooltip: 'Send Test Notification',
-            onPressed: _sendTestReminder,
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: _loadStatsAndPreferences,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          children: [
-            // 1. Streak Hero Card
-            _buildStreakHeroCard(theme, summary),
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 100,
+              floating: true,
+              snap: true,
+              pinned: true,
+              title: const Text('Reading Goals & Stats'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  tooltip: 'Send Test Notification',
+                  onPressed: _sendTestReminder,
+                ),
+              ],
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  // 1. Streak Hero Card
+                  _buildStreakHeroCard(theme, summary),
+                  const SizedBox(height: 16),
 
-            const SizedBox(height: 16),
+                  // 2. Today's Goal Card
+                  _buildTodayGoalCard(theme, todayMinutes, goalMinutes, progressFraction, isMet, summary.todayPages),
+                  const SizedBox(height: 16),
 
-            // 2. Today's Goal Card
-            _buildTodayGoalCard(theme, todayMinutes, goalMinutes, progressFraction, isMet, summary.todayPages),
+                  // 3. Hourly Reminder Configuration Card
+                  _buildReminderCard(theme),
+                  const SizedBox(height: 16),
 
-            const SizedBox(height: 16),
+                  // 4. Weekly Activity Card (Last 7 Days)
+                  _buildWeeklyActivityCard(theme, _recentStats, goalMinutes),
+                  const SizedBox(height: 16),
 
-            // 3. Hourly Reminder Configuration Card
-            _buildReminderCard(theme),
-
-            const SizedBox(height: 16),
-
-            // 4. Weekly Activity Card (Last 7 Days)
-            _buildWeeklyActivityCard(theme, _recentStats, goalMinutes),
-
-            const SizedBox(height: 16),
-
-            // 5. All-Time Milestone Stats (2x2 Grid)
-            _buildAllTimeMilestonesCard(theme, summary),
-
-            const SizedBox(height: 24),
+                  // 5. All-Time Milestone Stats (2x2 Grid)
+                  _buildAllTimeMilestonesCard(theme, summary),
+                  const SizedBox(height: 24),
+                ]),
+              ),
+            ),
           ],
         ),
       ),
@@ -322,89 +362,119 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
 
   Widget _buildStreakHeroCard(ThemeData theme, ReadingStreakSummary summary) {
     final hasStreak = summary.currentStreak > 0;
+    final noStreakStart = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainerHigh
+        : Colors.grey.shade800;
+    final noStreakEnd = theme.brightness == Brightness.dark
+        ? theme.colorScheme.surfaceContainerHighest
+        : Colors.grey.shade900;
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           colors: hasStreak
               ? [const Color(0xFFF05A28), const Color(0xFFEA3B52)]
-              : [Colors.grey.shade800, Colors.grey.shade900],
+              : [noStreakStart, noStreakEnd],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
             color: hasStreak
-                ? const Color(0xFFF05A28).withOpacity(0.3)
-                : Colors.black.withOpacity(0.2),
+                ? const Color(0xFFF05A28).withValues(alpha: 0.3)
+                : theme.shadowColor.withValues(alpha: 0.2),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: Colors.white,
-                  size: 36,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: CustomPaint(
+          painter: const _DiagonalPatternPainter(),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      hasStreak
-                          ? '${summary.currentStreak} Day Reading Streak!'
-                          : 'Start Your Streak Today!',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    // Fire icon with animated glow
+                    AnimatedBuilder(
+                      animation: _glowController,
+                      builder: (context, child) {
+                        final glowOpacity = 0.15 + (_glowController.value * 0.2);
+                        return Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                            boxShadow: hasStreak
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.orangeAccent.withValues(alpha: glowOpacity),
+                                      blurRadius: 16,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: const Icon(
+                            Icons.local_fire_department_rounded,
+                            color: Colors.white,
+                            size: 36,
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      hasStreak
-                          ? 'Keep reading daily to build a lifelong habit.'
-                          : 'Read any book for at least 1 min today to ignite the flame.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 13,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hasStreak
+                                ? '${summary.currentStreak} Day Reading Streak!'
+                                : 'Start Your Streak Today!',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            hasStreak
+                                ? 'Keep reading daily to build a lifelong habit.'
+                                : 'Read any book for at least 1 min today to ignite the flame.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Divider(color: Colors.white.withValues(alpha: 0.24), height: 1),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStreakMiniStat('BEST STREAK', '${summary.longestStreak} days'),
+                    Container(width: 1, height: 28, color: Colors.white.withValues(alpha: 0.24)),
+                    _buildStreakMiniStat('TOTAL DAYS', '${summary.totalDaysRead} days'),
+                    Container(width: 1, height: 28, color: Colors.white.withValues(alpha: 0.24)),
+                    _buildStreakMiniStat('STATUS', summary.isTodayGoalMet ? 'Goal Met 🎉' : 'In Progress 📖'),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white24, height: 1),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStreakMiniStat('BEST STREAK', '${summary.longestStreak} days'),
-              Container(width: 1, height: 24, color: Colors.white24),
-              _buildStreakMiniStat('TOTAL DAYS', '${summary.totalDaysRead} days'),
-              Container(width: 1, height: 24, color: Colors.white24),
-              _buildStreakMiniStat('STATUS', summary.isTodayGoalMet ? 'Goal Met 🎉' : 'In Progress 📖'),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -414,14 +484,14 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.7),
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           value,
           style: const TextStyle(
@@ -443,6 +513,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
     int todayPages,
   ) {
     final percent = (progressFraction * 100).toInt();
+    final accentColor = isMet ? Colors.teal : theme.colorScheme.primary;
 
     return Card(
       elevation: 2,
@@ -459,7 +530,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                   children: [
                     Icon(
                       isMet ? Icons.verified_rounded : Icons.track_changes_rounded,
-                      color: isMet ? Colors.teal : theme.colorScheme.primary,
+                      color: accentColor,
                       size: 24,
                     ),
                     const SizedBox(width: 8),
@@ -483,62 +554,115 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
             ),
             const SizedBox(height: 12),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  '$todayMinutes',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: isMet ? Colors.teal : theme.colorScheme.primary,
+                // Radial progress indicator
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.0, end: progressFraction),
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, animatedValue, child) {
+                      return Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: animatedValue,
+                            strokeWidth: 5,
+                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                            strokeCap: StrokeCap.round,
+                          ),
+                          Text(
+                            '${(animatedValue * 100).toInt()}%',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: accentColor,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                Text(
-                  ' / $goalMinutes mins',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isMet
-                        ? Colors.teal.withOpacity(0.12)
-                        : theme.colorScheme.primary.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    isMet ? 'Goal Achieved 🎉' : '$percent% Completed',
-                    style: TextStyle(
-                      color: isMet ? Colors.teal : theme.colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '$todayMinutes',
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: accentColor,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              '/ $goalMinutes mins',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          isMet ? 'Goal Achieved 🎉' : '$percent% Completed',
+                          style: TextStyle(
+                            color: accentColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            // Animated linear progress bar
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progressFraction,
-                minHeight: 10,
-                backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isMet ? Colors.teal : theme.colorScheme.primary,
-                ),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: progressFraction),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutCubic,
+                builder: (context, animatedValue, child) {
+                  return LinearProgressIndicator(
+                    value: animatedValue,
+                    minHeight: 10,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.auto_stories_outlined, size: 16, color: Colors.grey.shade600),
+                Icon(Icons.auto_stories_outlined, size: 16, color: theme.colorScheme.onSurfaceVariant),
                 const SizedBox(width: 6),
                 Text(
                   '$todayPages pages read today',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade700,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -589,7 +713,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                       Text(
                         'Remind every hour until goal is met',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.grey.shade600,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -612,12 +736,12 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                 decoration: BoxDecoration(
                   color: _hourlyReminderEnabled
                       ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
-                      : Colors.grey.withValues(alpha: 0.1),
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: _hourlyReminderEnabled
                         ? theme.colorScheme.outlineVariant.withValues(alpha: 0.5)
-                        : Colors.grey.withValues(alpha: 0.2),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.1),
                   ),
                 ),
                 child: Row(
@@ -626,7 +750,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                       Icons.wb_sunny_rounded,
                       color: _hourlyReminderEnabled
                           ? Colors.amber.shade700
-                          : Colors.grey,
+                          : theme.colorScheme.onSurfaceVariant,
                       size: 22,
                     ),
                     const SizedBox(width: 12),
@@ -640,13 +764,13 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                               fontWeight: FontWeight.bold,
                               color: _hourlyReminderEnabled
                                   ? theme.textTheme.bodyMedium?.color
-                                  : Colors.grey,
+                                  : theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                           Text(
                             'Automatic first reminder of the day',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.grey.shade600,
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -660,7 +784,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                       decoration: BoxDecoration(
                         color: _hourlyReminderEnabled
                             ? theme.colorScheme.primary
-                            : Colors.grey.shade400,
+                            : theme.colorScheme.onSurfaceVariant,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -668,17 +792,21 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                         children: [
                           Text(
                             formattedStartTime,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: _hourlyReminderEnabled
+                                  ? theme.colorScheme.onPrimary
+                                  : theme.colorScheme.surface,
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(
+                          Icon(
                             Icons.edit_rounded,
                             size: 14,
-                            color: Colors.white,
+                            color: _hourlyReminderEnabled
+                                ? theme.colorScheme.onPrimary
+                                : theme.colorScheme.surface,
                           ),
                         ],
                       ),
@@ -692,7 +820,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
             Text(
               'When enabled, Raider automatically starts checking your reading progress at $formattedStartTime every morning and sends reminders every hour until you reach your daily reading goal. Once completed, reminders stop for the day.',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.grey.shade600,
+                color: theme.colorScheme.onSurfaceVariant,
                 height: 1.4,
               ),
             ),
@@ -735,6 +863,9 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
     List<DailyReadingStat> recentStats,
     int goalMinutes,
   ) {
+    final now = DateTime.now();
+    final todayDateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -755,68 +886,110 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
                 Text(
                   'Goal: ${goalMinutes}m/day',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade600,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: recentStats.map((stat) {
-                final dt = IsarReadingStatsRepository.parseDate(stat.date);
-                final dayLabel = _getDayShortName(dt.weekday);
-                final mins = stat.activeSeconds ~/ 60;
-                final isGoalAchieved = stat.isGoalMet || (stat.goalMinutes > 0 && mins >= stat.goalMinutes);
-                final double barFraction = (mins / (goalMinutes > 0 ? goalMinutes : 30)).clamp(0.0, 1.0);
+            SizedBox(
+              height: 130,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: recentStats.map((stat) {
+                  final dt = IsarReadingStatsRepository.parseDate(stat.date);
+                  final dayLabel = _getDayShortName(dt.weekday);
+                  final mins = stat.activeSeconds ~/ 60;
+                  final isGoalAchieved = stat.isGoalMet || (stat.goalMinutes > 0 && mins >= stat.goalMinutes);
+                  final double barFraction = (mins / (goalMinutes > 0 ? goalMinutes : 30)).clamp(0.0, 1.0);
+                  final isToday = stat.date == todayDateStr;
 
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isGoalAchieved)
-                      const Icon(Icons.check_circle_rounded, color: Colors.teal, size: 14)
-                    else
-                      const SizedBox(height: 14),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${mins}m',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: isGoalAchieved ? Colors.teal : Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      width: 16,
-                      height: 70,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        width: 16,
-                        height: (barFraction * 70).clamp(barFraction > 0 ? 6.0 : 0.0, 70.0),
-                        decoration: BoxDecoration(
-                          color: isGoalAchieved ? Colors.teal : theme.colorScheme.primary,
-                          borderRadius: BorderRadius.circular(8),
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isGoalAchieved)
+                        const Icon(Icons.check_circle_rounded, color: Colors.teal, size: 14)
+                      else
+                        const SizedBox(height: 14),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${mins}m',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isGoalAchieved ? Colors.teal : theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      dayLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
+                      const SizedBox(height: 6),
+                      // Goal line + animated bar
+                      SizedBox(
+                        width: isToday ? 22 : 16,
+                        height: 70,
+                        child: Stack(
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            // Background track
+                            Container(
+                              width: isToday ? 22 : 16,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            // Goal line marker
+                            Positioned(
+                              bottom: 70.0 * (goalMinutes > 0 ? 1.0 : 0.0) - 0.5,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                height: 1,
+                                color: theme.colorScheme.outline.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            // Animated fill bar
+                            TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0.0, end: barFraction),
+                              duration: const Duration(milliseconds: 700),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, animVal, child) {
+                                final barHeight = (animVal * 70).clamp(animVal > 0 ? 6.0 : 0.0, 70.0);
+                                return Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Container(
+                                    width: isToday ? 22 : 16,
+                                    height: barHeight,
+                                    decoration: BoxDecoration(
+                                      color: isGoalAchieved
+                                          ? Colors.teal
+                                          : (isToday
+                                              ? theme.colorScheme.primary
+                                              : theme.colorScheme.primary.withValues(alpha: 0.7)),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              }).toList(),
+                      const SizedBox(height: 8),
+                      Text(
+                        dayLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isToday
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
             ),
           ],
         ),
@@ -901,20 +1074,27 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(height: 10),
           Text(
             value,
-            style: theme.textTheme.titleMedium?.copyWith(
+            style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -922,7 +1102,7 @@ class _ReadingStatsScreenState extends ConsumerState<ReadingStatsScreen> {
           Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.grey.shade600,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ],

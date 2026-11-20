@@ -54,12 +54,12 @@ void main() {
     await tester.pump();
 
     expect(find.text('My Library'), findsOneWidget);
-    expect(find.text('No books yet'), findsOneWidget);
+    expect(find.text('Your reading journey starts here'), findsOneWidget);
     expect(
-      find.text('Browse supported book files, then add the ones you want'),
+      find.text('Browse and add books from your device to get started'),
       findsOneWidget,
     );
-    expect(find.text('Browse books'), findsOneWidget);
+    expect(find.text('Browse Books'), findsOneWidget);
   });
 
   testWidgets('LibraryScreen displays book cards when books exist', (WidgetTester tester) async {

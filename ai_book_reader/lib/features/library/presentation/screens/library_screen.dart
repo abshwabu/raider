@@ -623,7 +623,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
                     const SizedBox(height: 16),
                     Text('Failed to load library: $err'),
                   ],
@@ -668,13 +668,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isImporting ? null : _showAddBooksMenu,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 4,
         icon: _isImporting
-            ? const SizedBox(
+            ? SizedBox(
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: theme.colorScheme.onPrimary,
                 ),
               )
             : const Icon(Icons.add),
@@ -694,17 +697,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
         final fraction = summary.todayProgressFraction;
         final isMet = summary.isTodayGoalMet;
 
-        return Padding(
+        Widget headerContent = Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Material(
             color: isMet
-                ? Colors.teal.withValues(alpha: 0.08)
+                ? theme.colorScheme.tertiaryContainer.withValues(alpha: 0.5)
                 : theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
               side: BorderSide(
                 color: isMet
-                    ? Colors.teal.withValues(alpha: 0.3)
+                    ? theme.colorScheme.tertiary.withValues(alpha: 0.3)
                     : theme.colorScheme.primary.withValues(alpha: 0.15),
               ),
             ),
@@ -721,24 +724,40 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.local_fire_department_rounded,
-                      color: streak > 0 ? const Color(0xFFF05A28) : Colors.grey,
-                      size: 20,
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: streak > 0
+                            ? const Color(0xFFF05A28).withValues(alpha: 0.12)
+                            : theme.colorScheme.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.local_fire_department_rounded,
+                        color: streak > 0
+                            ? const Color(0xFFF05A28)
+                            : theme.colorScheme.onSurfaceVariant,
+                        size: 24,
+                      ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Text(
                       streak > 0 ? '$streak day streak' : 'Start streak',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
-                        color: streak > 0 ? const Color(0xFFF05A28) : Colors.grey.shade700,
+                        color: streak > 0
+                            ? const Color(0xFFF05A28)
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Text(
                       '•',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -754,14 +773,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: isMet ? Colors.teal : theme.colorScheme.onSurface,
+                                  color: isMet
+                                      ? theme.colorScheme.tertiary
+                                      : theme.colorScheme.onSurface,
                                 ),
                               ),
                               Text(
                                 '${(fraction * 100).toInt()}%',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: Colors.grey.shade600,
+                                  color: theme.colorScheme.onSurfaceVariant,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -773,9 +794,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
                             child: LinearProgressIndicator(
                               value: fraction,
                               minHeight: 4,
-                              backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                isMet ? Colors.teal : theme.colorScheme.primary,
+                                isMet
+                                    ? theme.colorScheme.tertiary
+                                    : theme.colorScheme.primary,
                               ),
                             ),
                           ),
@@ -786,7 +809,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 18,
-                      color: Colors.grey.shade500,
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                     ),
                   ],
                 ),
@@ -794,6 +817,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
             ),
           ),
         );
+
+        // Animated gradient shimmer when goal is met
+        if (isMet) {
+          headerContent = _GoalMetShimmer(child: headerContent);
+        }
+
+        return headerContent;
       },
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
@@ -807,39 +837,100 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.menu_book_rounded,
-              size: 80,
-              color: theme.colorScheme.primary.withValues(alpha: 0.5),
+            // Stacked overlapping semi-transparent book icons
+            SizedBox(
+              height: 120,
+              width: 140,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: Transform.rotate(
+                      angle: -0.2,
+                      child: Icon(
+                        Icons.auto_stories_rounded,
+                        size: 64,
+                        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    top: 5,
+                    child: Transform.rotate(
+                      angle: 0.15,
+                      child: Icon(
+                        Icons.book_rounded,
+                        size: 56,
+                        color: theme.colorScheme.tertiary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    child: Icon(
+                      Icons.menu_book_rounded,
+                      size: 80,
+                      color: theme.colorScheme.primary.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Text(
-              'No books yet',
+              'Your reading journey starts here',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Browse supported book files, then add the ones you want',
+              'Browse and add books from your device to get started',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
+            const SizedBox(height: 12),
+            // Supported format chips
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              alignment: WrapAlignment.center,
+              children: const [
+                _FormatChip(label: 'PDF'),
+                _FormatChip(label: 'EPUB'),
+                _FormatChip(label: 'TXT'),
+                _FormatChip(label: 'DOCX'),
+                _FormatChip(label: 'MOBI'),
+                _FormatChip(label: 'CBZ'),
+              ],
+            ),
+            const SizedBox(height: 28),
+            FilledButton.icon(
               onPressed: _isImporting ? null : _handleBrowseBooks,
               icon: const Icon(Icons.library_books_outlined),
-              label: const Text('Browse books'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              label: const Text('Browse Books'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            TextButton(
+            OutlinedButton.icon(
               onPressed: _isImporting ? null : _handlePickFiles,
-              child: const Text('Or import files immediately'),
+              icon: const Icon(Icons.file_download_outlined, size: 18),
+              label: const Text('Import files directly'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
             ),
           ],
         ),
@@ -912,6 +1003,116 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with WidgetsBindi
   }
 }
 
+// ---------------------------------------------------------------------------
+// Shimmer wrapper for the daily goal header when goal is met
+// ---------------------------------------------------------------------------
+class _GoalMetShimmer extends StatefulWidget {
+  final Widget child;
+  const _GoalMetShimmer({required this.child});
+
+  @override
+  State<_GoalMetShimmer> createState() => _GoalMetShimmerState();
+}
+
+class _GoalMetShimmerState extends State<_GoalMetShimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (bounds) {
+            return LinearGradient(
+              begin: Alignment(-1.0 + 2.0 * _controller.value, 0.0),
+              end: Alignment(1.0 + 2.0 * _controller.value, 0.0),
+              colors: const [
+                Color(0x00FFD700),
+                Color(0x44FFD700),
+                Color(0x00FFD700),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.srcATop,
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Format chip for empty state
+// ---------------------------------------------------------------------------
+class _FormatChip extends StatelessWidget {
+  final String label;
+  const _FormatChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Chip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      padding: EdgeInsets.zero,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      side: BorderSide(
+        color: theme.colorScheme.outlineVariant,
+      ),
+      backgroundColor: theme.colorScheme.surfaceContainerLow,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: human-readable time-ago string
+// ---------------------------------------------------------------------------
+String _timeAgo(DateTime dateTime) {
+  final now = DateTime.now();
+  final diff = now.difference(dateTime);
+  if (diff.inDays > 365) {
+    final years = (diff.inDays / 365).floor();
+    return years == 1 ? '1 year ago' : '$years years ago';
+  } else if (diff.inDays > 30) {
+    final months = (diff.inDays / 30).floor();
+    return months == 1 ? '1 month ago' : '$months months ago';
+  } else if (diff.inDays > 0) {
+    return diff.inDays == 1 ? '1 day ago' : '${diff.inDays} days ago';
+  } else if (diff.inHours > 0) {
+    return diff.inHours == 1 ? '1 hour ago' : '${diff.inHours} hours ago';
+  } else if (diff.inMinutes > 0) {
+    return '${diff.inMinutes} min ago';
+  }
+  return 'Just now';
+}
+
 Color _getFormatColor(String format) {
   switch (format.toLowerCase()) {
     case 'pdf':
@@ -975,7 +1176,53 @@ IconData _getFormatIcon(String format) {
   }
 }
 
-class _BookCard extends StatelessWidget {
+// ---------------------------------------------------------------------------
+// Decorative pattern painter for generated covers
+// ---------------------------------------------------------------------------
+class _CoverPatternPainter extends CustomPainter {
+  final Color color;
+  _CoverPatternPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    // Draw subtle diagonal lines
+    const spacing = 18.0;
+    for (double i = -size.height; i < size.width + size.height; i += spacing) {
+      canvas.drawLine(
+        Offset(i, 0),
+        Offset(i + size.height, size.height),
+        paint,
+      );
+    }
+
+    // Draw a few decorative circles
+    final circlePaint = Paint()
+      ..color = color.withValues(alpha: color.a * 0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.6;
+    canvas.drawCircle(
+      Offset(size.width * 0.2, size.height * 0.3),
+      size.width * 0.15,
+      circlePaint,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.8, size.height * 0.7),
+      size.width * 0.12,
+      circlePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CoverPatternPainter oldDelegate) =>
+      color != oldDelegate.color;
+}
+
+class _BookCard extends StatefulWidget {
   final Book book;
   final VoidCallback onTap;
   final VoidCallback onDelete;
@@ -987,195 +1234,272 @@ class _BookCard extends StatelessWidget {
   });
 
   @override
+  State<_BookCard> createState() => _BookCardState();
+}
+
+class _BookCardState extends State<_BookCard> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final book = widget.book;
     final hasCover = book.coverImagePath != null && File(book.coverImagePath!).existsSync();
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onDelete,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (hasCover)
-                    Image.file(
-                      File(book.coverImagePath!),
-                      fit: BoxFit.cover,
-                    )
-                  else
-                    _buildGeneratedCover(theme),
+    return AnimatedScale(
+      scale: _pressed ? 0.96 : 1.0,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: InkWell(
+          onTap: widget.onTap,
+          onLongPress: widget.onDelete,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (hasCover)
+                      Image.file(
+                        File(book.coverImagePath!),
+                        fit: BoxFit.cover,
+                      )
+                    else
+                      _buildGeneratedCover(theme),
 
-                  // Format Tag Badge
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _getFormatColor(book.format).withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        book.format.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Overflow Menu Button
-                  Positioned(
-                    top: 4,
-                    left: 4,
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: PopupMenuButton<String>(
-                        icon: Container(
-                          padding: const EdgeInsets.all(4),
+                    // Shadow gradient overlay at the bottom for text readability
+                    if (hasCover)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 48,
+                        child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.more_vert,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                        ),
-                        onSelected: (value) {
-                          if (value == 'delete') {
-                            onDelete();
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem<String>(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                SizedBox(width: 8),
-                                Text('Delete', style: TextStyle(color: Colors.red)),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.4),
                               ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    book.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
-                    ),
-                  ),
-                  if (book.author != null && book.author!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      book.author!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: book.readingProgress.clamp(0.0, 1.0),
-                            minHeight: 4,
-                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                            color: theme.colorScheme.primary,
+
+                    // Format Tag Badge
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getFormatColor(book.format).withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          book.format.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                    ),
+
+                    // Overflow Menu Button
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: PopupMenuButton<String>(
+                          icon: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.more_vert,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                          onSelected: (value) {
+                            if (value == 'delete') {
+                              widget.onDelete();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Delete', style: TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      book.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
+                    if (book.author != null && book.author!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
                       Text(
-                        book.readingProgress > 0
-                            ? '${(book.readingProgress * 100).toInt()}%'
-                            : 'Unread',
+                        book.author!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          fontSize: 10,
                           color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 11,
                         ),
                       ),
                     ],
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: book.readingProgress.clamp(0.0, 1.0),
+                              minHeight: 5,
+                              backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          book.readingProgress > 0
+                              ? '${(book.readingProgress * 100).toInt()}%'
+                              : 'Unread',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildGeneratedCover(ThemeData theme) {
-    final format = book.format.toLowerCase();
+    final format = widget.book.format.toLowerCase();
     final gradientColors = _getFormatGradient(format);
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: gradientColors,
-        ),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            _getFormatIcon(format),
-            size: 36,
-            color: Colors.white.withValues(alpha: 0.8),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            book.title,
-            maxLines: 3,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-              height: 1.2,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Base gradient
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: gradientColors,
             ),
           ),
-        ],
-      ),
+        ),
+        // Subtle pattern overlay
+        CustomPaint(
+          painter: _CoverPatternPainter(
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+        // Decorative semi-transparent shapes
+        Positioned(
+          right: -10,
+          top: -10,
+          child: Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.06),
+            ),
+          ),
+        ),
+        Positioned(
+          left: -15,
+          bottom: -15,
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+        ),
+        // Content
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _getFormatIcon(format),
+                size: 36,
+                color: Colors.white.withValues(alpha: 0.8),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.book.title,
+                maxLines: 3,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1198,7 +1522,7 @@ class _BookListItem extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 1,
+      elevation: 2,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -1213,8 +1537,8 @@ class _BookListItem extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: SizedBox(
-                  width: 52,
-                  height: 72,
+                  width: 56,
+                  height: 78,
                   child: hasCover
                       ? Image.file(
                           File(book.coverImagePath!),
@@ -1273,15 +1597,26 @@ class _BookListItem extends StatelessWidget {
                         height: 1.2,
                       ),
                     ),
+                    // Last opened / time-ago text
+                    if (book.lastOpenedAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Opened ${_timeAgo(book.lastOpenedAt!)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(3),
                             child: LinearProgressIndicator(
                               value: book.readingProgress.clamp(0.0, 1.0),
-                              minHeight: 4,
+                              minHeight: 5,
                               backgroundColor: theme.colorScheme.surfaceContainerHighest,
                               color: theme.colorScheme.primary,
                             ),
